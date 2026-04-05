@@ -1,0 +1,38 @@
+# Credenciales — nunca subir
+.env
+
+# Logs del daemon y KAIROS
+daemon.log
+daemon_error.log
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos temporales
+*.tmp
+*.bak
+
+# plist del daemon (contiene paths locales)
+com.alter.daemon.plist
+
+*.txt
+.venv
