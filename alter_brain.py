@@ -252,6 +252,11 @@ class AlterBrain:
         except Exception as e:
             print(f"[MEMORIA] Error guardando interlocutor: {e}")
 
+    def cerrar_sesion(self):
+        """Guarda el estado del interlocutor al cerrar la sesión."""
+        self._guardar_interlocutor()
+        print(f"[MEMORIA] Sesión cerrada. Interlocutor '{self.interlocutor_id}' guardado.")
+
     def registrar_observacion(self, observacion: str):
         """Guarda algo que ALTER notó sobre el interlocutor."""
         if not observacion:
