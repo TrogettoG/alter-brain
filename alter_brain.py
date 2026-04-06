@@ -49,6 +49,11 @@ try:
         MemorySystem, detectar_feedback,
     )
     from alter_policy import PolicyArbiter, PolicyDecision
+    from alter_metrics import MetricsCollector
+    from alter_simulator import CounterfactualSimulator
+    from alter_selfmodel import SelfModel, SelfModelBuilder, selfmodel_snapshot_str
+    from alter_metalearning import MetaLearningEngine
+    from alter_auditor import ArchitectureAuditor
     ALTERB3_ENABLED = True
 except ImportError:
     ALTERB3_ENABLED = False
@@ -296,6 +301,19 @@ class AlterBrain:
         # Policy Arbiter
         self.arbiter = PolicyArbiter()
         print(f"[B3] PolicyArbiter inicializado")
+
+        # B4 — MetricsCollector + Simulator
+        self.metrics   = MetricsCollector(redis_client=self.redis)
+        self.simulator = CounterfactualSimulator()
+
+        # B4 — Self-Model
+        builder = SelfModelBuilder(redis_client=self.redis)
+        self.selfmodel = builder.load() or SelfModel()
+
+        # B4 — Meta-Learning + Auditor
+        self.metalearning = MetaLearningEngine(redis_client=self.redis)
+        self.auditor      = ArchitectureAuditor(redis_client=self.redis)
+        print(f"[B4] MetricsCollector + Simulator + SelfModel + MetaLearning + Auditor OK")
 
     def _sync_alterb3_from_vector(self):
         """Sincroniza homeostasis con el vector emocional actual."""
@@ -1993,6 +2011,10 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
             self._sync_alterb3_from_vector()
             hs_snap = homeostasis_snapshot(self.homeostasis)
 
+            # B4 — reportar métricas de homeostasis
+            self.metrics.next_turn()
+            self.metrics.report_homeostasis(self.homeostasis)
+
             # Predictive Model — paso 1: inferencia + error (antes de Gemini)
             self.predictive = predictive_pre(
                 self.predictive,
@@ -2002,11 +2024,17 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
             )
             pred_snapshot_str = predictive_snapshot_str(self.predictive)
 
+            # B4 — reportar métricas del predictive
+            self.metrics.report_predictive(self.predictive)
+
             # Workspace — candidatos desde input + predictive
             candidates = self._build_workspace_candidates(texto_input, interlocutor)
             candidates += export_workspace_candidates(self.predictive)
             self.workspace.tick(candidates, hs_snap)
             ws_snapshot_str = self.workspace.snapshot_str(hs_snap)
+
+            # B4 — reportar métricas del workspace
+            self.metrics.report_workspace(self.workspace)
 
         # Inner Council — corre en paralelo con la preparación del prompt
         council_task = asyncio.create_task(
@@ -2334,6 +2362,43 @@ DEBATE INTERNO (no lo menciones, pero usalo para pensar):
                 if policy.action == "preguntar" and policy.override_data.get("pregunta"):
                     data["respuesta"] = policy.override_data["pregunta"]
 
+            # B4 — reportar métricas del policy
+            self.metrics.report_policy(policy)
+
+            # B4 — Counterfactual Simulator
+            council_tension = data.get("_council_tension", "ninguna")
+            riesgo = self.predictive.expected_effect.get("riesgo_desalineacion", 0.3)
+            pred_error = self.predictive.prediction_error_last
+
+            sim_activated = self.simulator.should_activate(
+                council_tension, riesgo, pred_error
+            )
+            sim_overrode = False
+
+            if sim_activated:
+                hs_snap_sim = homeostasis_snapshot(self.homeostasis)
+                sim_result = self.simulator.evaluate(
+                    accion_gemini    = data.get("accion", "responder"),
+                    texto_input      = texto,
+                    workspace_snap   = self.workspace.snapshot(hs_snap_sim),
+                    homeostasis_snap = hs_snap_sim,
+                    predictive_state = self.predictive,
+                    council_tension  = council_tension,
+                )
+                if sim_result.recomienda_override:
+                    accion_sim = sim_result.ganador.accion
+                    # Mapear nombre de escenario a acción del sistema
+                    accion_map = {
+                        "responder_directo": "responder",
+                        "preguntar":         "preguntar",
+                        "reformular":        "reformular",
+                    }
+                    data["accion"] = accion_map.get(accion_sim, data["accion"])
+                    sim_overrode = True
+                    print(f"[SIM] Override → {accion_sim} | {sim_result.razon[:70]}")
+
+            self.metrics.report_simulator(sim_activated, sim_overrode)
+
             # Si hay patrón activo → promover candidate_action al workspace
             if policy.override_data.get("promote_to_workspace"):
                 self.workspace.tick([{
@@ -2428,6 +2493,18 @@ DEBATE INTERNO (no lo menciones, pero usalo para pensar):
                 user_feedback     = feedback,
                 context_signature = context_sig,
             )
+            # B4 — reportar procedural y persistir métricas
+            self.metrics.report_procedural(self.memory.procedural)
+            self.metrics.persist_summary()
+
+            # B4 — Meta-Learning: evaluar políticas cognitivas
+            summary = self.metrics.get_summary()
+            applications = self.metalearning.evaluate(summary, self.selfmodel)
+            if applications:
+                for app in applications:
+                    print(f"[META] {app.policy_name[:50]} → "
+                          f"{app.modulo}.{app.parametro}: "
+                          f"{app.valor_antes:.2f}→{app.valor_despues:.2f}")
 
         respuesta = data.get("respuesta", "")
         if respuesta and data["accion"] != "ignorar":

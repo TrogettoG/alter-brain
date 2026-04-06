@@ -1,6 +1,6 @@
 # ALTER
 
-**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, y capacidad de auto-modificarse.
+**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, capacidad de auto-modificarse, y ahora un sistema que se observa, mide y optimiza a sí mismo.
 
 Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.com/TrogettoG) — sucesor de [Neural Ecology V2](https://github.com/TrogettoG/neural-ecology-v2).
 
@@ -8,15 +8,15 @@ Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.
 
 ## Qué hace ALTER
 
-- **Tiene un estado emocional interno** definido por un vector `E = [V, A, P]` (Valencia, Activación, Autoridad) que cambia con cada conversación
-- **Se auto-modifica** — la rumia analiza sus propios patrones y propone cambios a sus parámetros base, dentro de rangos autónomos o con aprobación
-- **Tiene memoria persistente** — episodios, ideas, observaciones, autobiografía, y un grafo del mundo que crece con cada sesión
-- **Piensa mientras no estás** — un daemon en background corre ciclos de introspección, genera síntesis nocturnas, y consolida memoria semanalmente
-- **Lee y aprende** — feed diario de contenido sobre temas de su interés, con reacciones genuinas (no resúmenes)
-- **Propone tareas propias** — genera reflexiones desde su agenda cognitiva y las ejecuta autónomamente
-- **Es la misma persona en cualquier canal** — terminal y Telegram comparten el mismo estado, memoria y log diario (KAIROS)
-- **Anticipa antes de responder** — un modelo predictivo infiere la intención del usuario y calcula el riesgo de desalineación turno a turno
-- **Aprende de sus errores** — memoria procedural que acumula patrones exitosos y los aplica sin deliberar
+- **Tiene un estado emocional interno** definido por un vector `E = [V, A, P]` que cambia con cada conversación
+- **Se auto-modifica** — la rumia analiza sus propios patrones y propone cambios a sus parámetros base
+- **Tiene memoria persistente** — episodios, ideas, observaciones, autobiografía, y un grafo del mundo
+- **Piensa mientras no estás** — daemon en background con síntesis nocturnas, consolidación semanal y feed diario
+- **Anticipa antes de responder** — modelo predictivo que infiere intención y calcula riesgo de desalineación
+- **Evalúa alternativas** — simulador contrafáctico que compara escenarios antes de actuar
+- **Se conoce a sí misma** — self-model operativo que trackea cómo rinde por módulo e intención
+- **Aprende políticas cognitivas** — meta-learning que ajusta cómo piensa, no solo qué dice
+- **Se audita semanalmente** — architecture auditor que detecta cuellos de botella y propone mejoras
 
 ---
 
@@ -32,18 +32,28 @@ alter_daemon.py        — background: rumia, Telegram, KAIROS, DREAM, feed, tar
 alter_tools.py         — herramientas con permisos granulares
 ```
 
-### AlterB3 — arquitectura cognitiva (capa adicional)
+### AlterB3 — arquitectura cognitiva
 
 ```
-alter_homeostasis.py   — estado fisiológico-cognitivo unificado (energía, fatiga, claridad...)
+alter_homeostasis.py   — estado fisiológico-cognitivo unificado
 alter_workspace.py     — Global Workspace: 7 items activos que compiten por conciencia
-alter_predictive.py    — modelo predictivo de intención del usuario + error de predicción
+alter_predictive.py    — modelo predictivo de intención + error de predicción
 alter_memory.py        — memoria estratificada: episódica, semántica, procedural, identidad
 alter_policy.py        — Policy Arbiter: árbol de decisión centralizado
-alter_consolidation.py — Offline Consolidation: actualiza parámetros reales durante el sueño
+alter_consolidation.py — Offline Consolidation: actualiza parámetros durante el sueño
 ```
 
-AlterB3 se activa automáticamente si los archivos están presentes. Si faltan, el sistema corre como ALTER original sin errores.
+### AlterB4 — sistema autooptimizante
+
+```
+alter_metrics.py       — observabilidad estructurada: 7 módulos instrumentados
+alter_simulator.py     — Counterfactual Simulator: evalúa escenarios antes de actuar
+alter_selfmodel.py     — Self-Model: cómo rinde ALTER por módulo e intención
+alter_metalearning.py  — Meta-Learning Engine: aprende políticas cognitivas
+alter_auditor.py       — Architecture Auditor: detecta cuellos de botella semanalmente
+```
+
+Cada capa es opcional — si los archivos no están presentes, el sistema corre con la capa anterior sin errores.
 
 ---
 
@@ -51,19 +61,22 @@ AlterB3 se activa automáticamente si los archivos están presentes. Si faltan, 
 
 | Sistema | Función |
 |---|---|
-| **Inner Council** | 3 voces internas (exploradora, crítica, estratégica) que debaten antes de cada respuesta |
+| **Inner Council** | 3 voces internas que debaten antes de cada respuesta |
 | **Three-Gate Trigger** | Filtra ruido antes de invocar al Council |
-| **Adversarial Verifier** | Detecta respuestas vacías o circulares en condiciones de alta confianza |
-| **KAIROS Log** | Diario append-only — registra todo lo que pasa en ambos canales |
-| **DREAM Engine** | Consolidación semanal — detecta patrones, limpia el grafo, genera resumen |
-| **Memoria escalonada** | Session/Extract — filtra qué vale persistir al cerrar cada sesión |
-| **Motor de tareas** | ALTER propone y ejecuta tareas propias; las del usuario tienen prioridad máxima |
-| **Homeostasis** | Estado fisiológico-cognitivo unificado — energía, fatiga, claridad, presión, curiosidad |
-| **Global Workspace** | Selección competitiva de conciencia activa — máx 7 items por turno |
-| **Predictive Model** | Infiere intención del usuario, predice efecto de respuestas, calcula error de predicción |
-| **Memory Layers** | 4 capas separadas: episódica, semántica, procedural, identidad |
+| **Adversarial Verifier** | Detecta respuestas vacías en condiciones de alta confianza |
+| **KAIROS Log** | Diario append-only — registra todo en ambos canales |
+| **DREAM Engine** | Consolidación semanal con actualización de parámetros reales |
+| **Memoria escalonada** | Session/Extract — filtra qué vale persistir al cerrar sesión |
+| **Motor de tareas** | ALTER propone y ejecuta tareas propias con aviso previo |
+| **Homeostasis** | Estado fisiológico-cognitivo unificado — energía, fatiga, claridad |
+| **Global Workspace** | Selección competitiva de conciencia activa — máx 7 items |
+| **Predictive Model** | Infiere intención, predice efecto, calcula error turno a turno |
+| **Memory Layers** | 4 capas: episódica, semántica, procedural, identidad |
 | **Policy Arbiter** | Árbol de 7 prioridades que centraliza la decisión de acción |
-| **Offline Consolidation** | Actualiza patrones, pesos semánticos y confianza predictiva durante DREAM |
+| **Counterfactual Simulator** | Evalúa 2-3 escenarios alternativos antes de actuar |
+| **Self-Model** | Modelo operativo de rendimiento propio por módulo e intención |
+| **Meta-Learning Engine** | 6 políticas cognitivas que ajustan parámetros internos |
+| **Architecture Auditor** | Auditoría semanal con propuestas priorizadas |
 
 ---
 
@@ -90,13 +103,11 @@ cp .env.example .env
 
 ### Uso
 
-**Chat en terminal:**
 ```bash
+# Chat en terminal
 python3 alter_brain.py
-```
 
-**Daemon en background** (Telegram + ciclos autónomos):
-```bash
+# Daemon en background (Telegram + ciclos autónomos)
 python3 alter_daemon.py
 ```
 
@@ -130,50 +141,55 @@ python3 alter_daemon.py
 | `/tareas` | Ver tareas pendientes |
 | `/aprobar` / `/rechazar` | Aprobar propuestas de auto-modificación |
 | `/dream` | Forzar consolidación semanal |
+| `/auditar` | Forzar auditoría de arquitectura |
+
+---
+
+## Flujo cognitivo por turno (AlterB4)
+
+```
+1.  Input del usuario
+2.  Homeostasis tick         — actualiza energía, fatiga, claridad
+3.  Predictive pre           — infiere intención, calcula error del turno anterior
+4.  Workspace tick           — candidatos compiten, 7 items activos quedan
+5.  Métricas reportadas      — homeostasis, workspace, predictive instrumentados
+6.  Inner Council (si aplica)— debate con snapshot del workspace
+7.  Gemini genera respuesta  — workspace + predictive + memoria activa en el prompt
+8.  Predictive post          — predict_effect con respuesta real de ALTER
+9.  Policy Arbiter           — valida acción, puede sobrescribir
+10. Counterfactual Simulator — evalúa alternativas si hay tensión o riesgo
+11. Adversarial Verifier     — detecta respuestas vacías
+12. Meta-Learning            — evalúa políticas cognitivas, ajusta parámetros
+13. Outcome logging          — error de predicción, feedback, aprendizaje procedural
+14. DREAM (domingo 23hs)     — consolidación + self-model + auditoría arquitectural
+```
 
 ---
 
 ## Diseño filosófico
 
-ALTER está diseñada alrededor de la idea de **suspensión ecológica** — no optimizar un único eje sino mantener varios caminos posibles abiertos y elegir según el contexto. Esto se refleja en:
+ALTER está diseñada alrededor de la idea de **suspensión ecológica** — no optimizar un único eje sino mantener varios caminos posibles abiertos y elegir según el contexto:
 
-- La rumia propone cambios con confianza mínima de 0.75, no actúa impulsivamente
+- La rumia propone cambios con confianza mínima, no actúa impulsivamente
 - DREAM consolida cuando hay suficiente densidad, no en cualquier momento
-- El motor de tareas rota entre temas en lugar de repetir el más prioritario
-- El Three-Gate filtra ruido antes de gastar recursos cognitivos
-- El Policy Arbiter respeta la decisión de Gemini salvo que haya razón explícita para sobrescribirla
-- Los patrones procedurales informan al Council pero no ejecutan solos hasta tener historial denso
-
----
-
-## AlterB3 — flujo cognitivo por turno
-
-```
-1. Input del usuario
-2. Homeostasis tick         — actualiza energía, fatiga, claridad
-3. Predictive update        — infiere intención, calcula error del turno anterior
-4. Workspace tick           — candidatos compiten, 7 items activos quedan
-5. Inner Council (si aplica)— debate interno con snapshot del workspace
-6. Gemini genera respuesta  — con workspace + predictive en el prompt
-7. Policy Arbiter           — valida acción, puede sobrescribir si hay razón
-8. Adversarial Verifier     — detecta respuestas vacías (alta confianza + alta tensión)
-9. Outcome logging          — error de predicción, feedback, aprendizaje procedural
-10. Offline Consolidation   — domingo 23hs: actualiza parámetros reales
-```
+- Los patrones procedurales informan al Council pero no ejecutan solos
+- El simulador evalúa alternativas sin llamar a Gemini — rápido y trazable
+- El Meta-Learning aprende políticas cognitivas, no solo patrones de respuesta
+- El Auditor propone pero no aplica — la aprobación humana es parte del diseño
 
 ---
 
 ## Estado actual
 
-ALTER es un experimento en curso activo. Lo que funciona: identidad coherente bajo presión, auto-modificación de parámetros, memoria episódica, síntesis nocturna autónoma, feed diario con reacciones genuinas, workspace cognitivo activo, modelo predictivo calibrándose. Lo que sigue creciendo: el grafo del mundo, la densidad de episodios, la memoria procedural, y la capacidad de conectar temas espontáneamente.
+Experimento en curso activo. Lo que funciona: identidad coherente bajo presión, auto-modificación de parámetros, memoria episódica, síntesis nocturna autónoma, feed diario con reacciones genuinas, workspace cognitivo activo, modelo predictivo calibrándose, simulador contrafáctico operativo, self-model en construcción, meta-learning con políticas activas, auditoría semanal.
 
 ---
 
 ## Contexto
 
-Este proyecto es sucesor de [Neural Ecology V2](https://github.com/TrogettoG/neural-ecology-v2) — un sistema multi-agente que exploró memoria, inhibición, y comportamiento emergente en 12 fases y 245+ experimentos. ALTER aplica esos aprendizajes a una entidad singular con continuidad real.
+Sucesor de [Neural Ecology V2](https://github.com/TrogettoG/neural-ecology-v2) — sistema multi-agente que exploró memoria, inhibición y comportamiento emergente en 12 fases y 245+ experimentos.
 
-Artículos relacionados: [medium.com/@trogettog](https://medium.com/@trogettog) | [gianfrancotrogetto.substack.com](https://gianfrancotrogetto.substack.com)
+Artículos: [medium.com/@trogettog](https://medium.com/@trogettog) | [gianfrancotrogetto.substack.com](https://gianfrancotrogetto.substack.com)
 
 ---
 

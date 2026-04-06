@@ -412,6 +412,41 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO. Sin texto antes ni después.
         except Exception as e:
             log(f"[B3-CONSOLIDATION] Error: {e}")
 
+        # AlterB4 — Architecture Auditor + Self-Model update
+        try:
+            from alter_metrics import MetricsSummary
+            from alter_selfmodel import SelfModel, SelfModelBuilder
+            from alter_metalearning import MetaLearningEngine
+            from alter_auditor import ArchitectureAuditor
+
+            # Actualizar Self-Model desde métricas acumuladas
+            builder  = SelfModelBuilder(redis_client=redis)
+            selfmodel = builder.build(builder.load())
+
+            # Correr Meta-Learning
+            raw_summary = redis.get("alter:metrics:summary")
+            metrics_summary = MetricsSummary(**json.loads(raw_summary)) \
+                if raw_summary else MetricsSummary(timestamp=datetime.now().isoformat())
+            metalearning = MetaLearningEngine(redis_client=redis)
+            apps = metalearning.evaluate(metrics_summary, selfmodel)
+            if apps:
+                log(f"[B4-META] {len(apps)} políticas activadas")
+
+            # Correr Auditor
+            auditor = ArchitectureAuditor(redis_client=redis)
+            audit_report = auditor.run(metrics_summary, selfmodel, metalearning)
+            log(f"[B4-AUDITOR] salud:{audit_report.score_salud:.2f} "
+                f"hallazgos:{len(audit_report.hallazgos)} "
+                f"propuestas:{len(audit_report.propuestas)}")
+
+            # Notificar por Telegram si hay propuestas
+            if audit_report.propuestas:
+                await send_telegram(
+                    f"🔍 {auditor.report_str(audit_report)}"
+                )
+        except Exception as e:
+            log(f"[B4-AUDITOR] Error: {e}")
+
     except Exception as e:
         log(f"DREAM error en consolidación: {e}")
 
@@ -1346,7 +1381,7 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
         if texto.lower() in ("/estado", "/drives", "/ideas", "/episodios",
                               "/agenda", "/autobiografia", "/economia",
                               "/mundo", "/aprobar", "/rechazar", "/trazas",
-                              "/dream", "/tareas") or texto.lower().startswith("/tarea "):
+                              "/dream", "/tareas", "/auditar") or texto.lower().startswith("/tarea "):
 
             if texto.lower() == "/drives":
                 drives = cargar_drives()
@@ -1511,6 +1546,25 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
                 await send_telegram("Iniciando consolidación... puede tardar un minuto.")
                 await dream_engine()
                 await send_telegram("Consolidación completada.")
+
+            elif texto.lower() == "/auditar":
+                await send_telegram("Auditando sistema...")
+                try:
+                    from alter_metrics import MetricsSummary
+                    from alter_selfmodel import SelfModel, SelfModelBuilder
+                    from alter_metalearning import MetaLearningEngine
+                    from alter_auditor import ArchitectureAuditor
+                    builder  = SelfModelBuilder(redis_client=redis)
+                    selfmodel = builder.build(builder.load())
+                    raw_sum  = redis.get("alter:metrics:summary")
+                    ms       = MetricsSummary(**json.loads(raw_sum)) \
+                               if raw_sum else MetricsSummary(timestamp=datetime.now().isoformat())
+                    ml       = MetaLearningEngine(redis_client=redis)
+                    auditor  = ArchitectureAuditor(redis_client=redis)
+                    report   = auditor.run(ms, selfmodel, ml)
+                    await send_telegram(f"🔍 {auditor.report_str(report)}")
+                except Exception as e:
+                    await send_telegram(f"Error en auditoría: {e}")
 
             elif texto.lower().startswith("/tarea "):
                 descripcion = texto[7:].strip()
@@ -1695,3 +1749,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n[ALTER daemon detenido]")
+
