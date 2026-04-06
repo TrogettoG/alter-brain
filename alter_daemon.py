@@ -509,6 +509,32 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO. Sin texto antes ni después.
             except Exception as e:
                 log(f"[B5-PROMOTION] Error: {e}")
 
+            # B5 Fase 4 — Proposal Engine (hipótesis estructurales)
+            try:
+                from alter_code_proposals import ProposalEngine
+                from alter_code_map import CodeMapper
+
+                import os
+                directorio_b5 = os.path.dirname(os.path.abspath(__file__))
+                repo_map_b5   = CodeMapper().scan(directorio_b5)
+
+                prop_engine   = ProposalEngine()
+                existing_props = prop_engine.load(redis)
+                nuevas_props   = prop_engine.generate(todas, repo_map_b5, existing_props)
+
+                if nuevas_props:
+                    todas_props = existing_props + nuevas_props
+                    prop_engine.save(todas_props, redis)
+                    log(f"[B5-PROPOSALS] {len(nuevas_props)} nuevas | "
+                        f"{len(todas_props)} total")
+                    # Notificar propuestas de impacto alto
+                    altas = [p for p in nuevas_props if p.impacto == "alto"]
+                    if altas:
+                        for p in altas[:2]:
+                            await send_telegram(f"📋 Nueva propuesta estructural:\n{p.render()}")
+            except Exception as e:
+                log(f"[B5-PROPOSALS] Error: {e}")
+
         except Exception as e:
             log(f"[B5-HYP/EXP] Error: {e}")
         try:

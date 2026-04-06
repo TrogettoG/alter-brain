@@ -1,6 +1,6 @@
 # ALTER
 
-**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, capacidad de auto-modificarse, y un sistema que se observa, mide, optimiza, entiende su propio código, experimenta variantes y promueve mejoras de forma controlada.
+**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, capacidad de auto-modificarse, y un sistema que se observa, mide, optimiza, entiende su propio código, experimenta variantes, promueve mejoras controladas y propone su propia refactorización.
 
 Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.com/TrogettoG) — sucesor de [Neural Ecology V2](https://github.com/TrogettoG/neural-ecology-v2).
 
@@ -21,6 +21,7 @@ Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.
 - **Formula hipótesis sobre sí misma** — genera hipótesis de mejora desde observaciones reales
 - **Experimenta sin riesgo** — prueba variantes paramétricas contra telemetría histórica sin tocar producción
 - **Promueve mejoras controladas** — activa cambios seguros automáticamente con rollback vigilado
+- **Propone su propia refactorización** — genera pseudo-diffs estructurales con evidencia y plan de rollback
 
 ---
 
@@ -66,6 +67,7 @@ alter_code_auditor.py            — comparador spec vs código: gaps, deuda té
 alter_architecture_hypotheses.py — generador de hipótesis desde observaciones reales
 alter_experiments.py             — Experiment Runner: prueba variantes sobre telemetría histórica
 alter_feature_flags.py           — Feature Flags + Controlled Promotion + Rollback Monitor
+alter_code_proposals.py          — Proposals con pseudo-diffs para cambios estructurales
 ```
 
 Cada capa es opcional — si los archivos no están presentes, el sistema corre con la capa anterior sin errores.
@@ -74,30 +76,32 @@ Cada capa es opcional — si los archivos no están presentes, el sistema corre 
 
 ### Sistemas cognitivos
 
-| Sistema | Función |
-|---|---|
-| **Inner Council** | 3 voces internas que debaten antes de cada respuesta |
-| **Three-Gate Trigger** | Filtra ruido antes de invocar al Council |
-| **Adversarial Verifier** | Detecta respuestas vacías en condiciones de alta confianza |
-| **KAIROS Log** | Diario append-only — registra todo en ambos canales |
-| **DREAM Engine** | Consolidación semanal con actualización de parámetros reales |
-| **Memoria escalonada** | Session/Extract — filtra qué vale persistir al cerrar sesión |
-| **Motor de tareas** | ALTER propone y ejecuta tareas propias con aviso previo |
-| **Homeostasis** | Estado fisiológico-cognitivo unificado — energía, fatiga, claridad |
-| **Global Workspace** | Selección competitiva de conciencia activa — máx 7 items |
-| **Predictive Model** | Infiere intención, predice efecto, calcula error turno a turno |
-| **Memory Layers** | 4 capas: episódica, semántica, procedural, identidad |
-| **Policy Arbiter** | Árbol de 7 prioridades que centraliza la decisión de acción |
-| **Counterfactual Simulator** | Evalúa 2-3 escenarios alternativos antes de actuar |
-| **Self-Model** | Modelo operativo de rendimiento propio por módulo e intención |
-| **Meta-Learning Engine** | 6 políticas cognitivas que ajustan parámetros internos |
-| **Architecture Auditor** | Auditoría semanal con propuestas priorizadas |
-| **Architecture State** | Spec formal consultable de los 19 módulos y su pipeline |
-| **Code Map** | Mapa read-only del repo real — clases, funciones, imports, líneas |
-| **Code Auditor** | Compara spec vs código — detecta gaps, deuda técnica y acoplamiento |
-| **Hypothesis Generator** | Formula hipótesis de mejora desde observaciones reales |
-| **Experiment Runner** | Prueba variantes paramétricas sobre telemetría sin tocar producción |
-| **Feature Flags** | Activa cambios seguros automáticamente con rollback vigilado por ventana |
+| Sistema | Capa | Función |
+|---|---|---|
+| **Inner Council** | Base | 3 voces internas que debaten antes de cada respuesta |
+| **Three-Gate Trigger** | Base | Filtra ruido antes de invocar al Council |
+| **Adversarial Verifier** | Base | Detecta respuestas vacías en condiciones de alta confianza |
+| **KAIROS Log** | Base | Diario append-only — registra todo en ambos canales |
+| **DREAM Engine** | Base | Consolidación semanal con actualización de parámetros reales |
+| **Motor de tareas** | Base | ALTER propone y ejecuta tareas propias con aviso previo |
+| **Homeostasis** | B3 | Estado fisiológico-cognitivo unificado — energía, fatiga, claridad |
+| **Global Workspace** | B3 | Selección competitiva de conciencia activa — máx 7 items |
+| **Predictive Model** | B3 | Infiere intención, predice efecto, calcula error turno a turno |
+| **Memory Layers** | B3 | 4 capas: episódica, semántica, procedural, identidad |
+| **Policy Arbiter** | B3 | Árbol de 7 prioridades que centraliza la decisión de acción |
+| **Offline Consolidation** | B3 | Actualiza patrones y pesos durante el sueño |
+| **Metrics** | B4 | Observabilidad estructurada — 7 módulos instrumentados |
+| **Counterfactual Simulator** | B4 | Evalúa 2-3 escenarios alternativos antes de actuar |
+| **Self-Model** | B4 | Rendimiento propio por módulo e intención |
+| **Meta-Learning Engine** | B4 | 6 políticas cognitivas que ajustan parámetros internos |
+| **Architecture Auditor** | B4 | Auditoría semanal con propuestas priorizadas |
+| **Architecture State** | B5 | Spec formal consultable de los 19 módulos y su pipeline |
+| **Code Map** | B5 | Mapa read-only del repo real |
+| **Code Auditor** | B5 | Detecta gaps, deuda técnica y acoplamiento |
+| **Hypothesis Generator** | B5 | Formula hipótesis de mejora desde observaciones |
+| **Experiment Runner** | B5 | Prueba variantes sobre telemetría sin tocar producción |
+| **Feature Flags** | B5 | Activa cambios seguros con rollback automático vigilado |
+| **Proposal Engine** | B5 | Genera pseudo-diffs estructurales con evidencia y rollback |
 
 ---
 
@@ -134,23 +138,7 @@ python3 alter_daemon.py
 
 ---
 
-## Comandos
-
-### Terminal
-
-| Comando | Descripción |
-|---|---|
-| `estado` | Vector emocional y campo mental actual |
-| `drives` | Niveles de motivación |
-| `episodios` | Momentos importantes guardados |
-| `agenda` | Items cognitivos pendientes |
-| `autobiografia` | Narrativa interna de ALTER |
-| `trazas` | Análisis de observabilidad cognitiva |
-| `mundo` | Grafo de entidades conocidas |
-| `economia` | Estado de recursos internos |
-| `mods` | Historial de auto-modificaciones |
-
-### Telegram
+## Comandos Telegram
 
 | Comando | Descripción |
 |---|---|
@@ -167,44 +155,43 @@ python3 alter_daemon.py
 
 ---
 
-## Flujo cognitivo por turno
+## Ciclos de operación
 
+### Por turno
 ```
-1.  Input del usuario
-2.  Homeostasis tick         — actualiza energía, fatiga, claridad
-3.  Predictive pre           — infiere intención, calcula error del turno anterior
-4.  Workspace tick           — candidatos compiten, 7 items activos quedan
-5.  Métricas reportadas      — homeostasis, workspace, predictive instrumentados
-6.  Inner Council (si aplica)— debate con snapshot del workspace
-7.  Gemini genera respuesta  — workspace + predictive + memoria activa en el prompt
-8.  Predictive post          — predict_effect con respuesta real de ALTER
-9.  Policy Arbiter           — valida acción, puede sobrescribir
-10. Counterfactual Simulator — evalúa alternativas si hay tensión o riesgo
-11. Adversarial Verifier     — detecta respuestas vacías
-12. Meta-Learning            — evalúa políticas cognitivas, ajusta parámetros
-13. Outcome logging          — error de predicción, feedback, aprendizaje procedural
-```
-
-## Ciclo DREAM (domingo 23hs)
-
-```
-1.  Consolidación de memoria     — episodios, ideas, grafo del mundo
-2.  Offline Consolidation (B3)   — actualiza patrones y confianza predictiva
-3.  Self-Model update (B4)       — recalibra rendimiento por módulo e intención
-4.  Meta-Learning (B4)           — evalúa políticas cognitivas activas
-5.  Architecture Auditor (B4)    — detecta cuellos de botella, genera propuestas
-6.  Code Auditor (B5)            — compara spec vs código real
-7.  Hypothesis Generator (B5)    — formula hipótesis desde observaciones
-8.  Experiment Runner (B5)       — prueba variantes replayables sobre telemetría
-9.  Controlled Promotion (B5)    — activa cambios seguros, crea flags pendientes
+1.  Homeostasis tick         — energía, fatiga, claridad
+2.  Predictive pre           — inferencia de intención, error del turno anterior
+3.  Workspace tick           — competencia de candidatos, 7 items activos
+4.  Métricas                 — homeostasis, workspace, predictive instrumentados
+5.  Inner Council            — debate si hay tensión suficiente
+6.  Gemini                   — genera respuesta con contexto filtrado
+7.  Predictive post          — predict_effect con respuesta real
+8.  Policy Arbiter           — valida y puede sobrescribir acción
+9.  Simulator                — evalúa alternativas si hay riesgo o tensión
+10. Adversarial Verifier     — detecta respuestas vacías
+11. Meta-Learning            — evalúa políticas, ajusta parámetros
+12. Outcome logging          — error, feedback, aprendizaje procedural
 ```
 
-## Ciclo drives (cada 30 min)
+### DREAM (domingo 23hs)
+```
+1.  Consolidación memoria    — episodios, ideas, grafo
+2.  Offline Consolidation    — patrones, confianza predictiva (B3)
+3.  Self-Model update        — rendimiento por módulo e intención (B4)
+4.  Meta-Learning            — políticas cognitivas (B4)
+5.  Architecture Auditor     — cuellos de botella, propuestas (B4)
+6.  Code Auditor             — spec vs código real (B5)
+7.  Hypothesis Generator     — hipótesis desde observaciones (B5)
+8.  Experiment Runner        — variantes replayables sobre telemetría (B5)
+9.  Controlled Promotion     — activa cambios seguros, crea flags (B5)
+10. Proposal Engine          — pseudo-diffs estructurales (B5)
+```
 
+### Drives (cada 30 min)
 ```
 1.  Actualiza drives
-2.  recover_state homeostasis (si usuario ausente)
-3.  RollbackMonitor — chequea flags activos, revierte si hay deterioro sostenido
+2.  recover_state homeostasis (usuario ausente)
+3.  RollbackMonitor — chequea flags, revierte si hay deterioro sostenido
 4.  Mensaje proactivo si drive supera umbral
 ```
 
@@ -212,17 +199,19 @@ python3 alter_daemon.py
 
 ## Reglas de auto-aprobación de flags (B5)
 
-Un cambio paramétrico se activa automáticamente solo si cumple las 7 condiciones:
+Un cambio se activa automáticamente solo si cumple las 7 condiciones simultáneamente:
 
-1. `riesgo == "bajo"`
-2. `confianza >= 0.70`
-3. `experiment.mejora == True`
-4. delta acotado (≤ 20% del valor baseline)
-5. no hay flag activo para el mismo parámetro
-6. no hubo rollback reciente (cooldown 48h)
-7. un solo flag auto-aprobado activo por vez
+| Condición | Valor |
+|---|---|
+| Riesgo | `"bajo"` |
+| Confianza del experimento | `>= 0.70` |
+| Resultado del experimento | `mejora == True` |
+| Delta paramétrico | `<= 20%` del valor baseline |
+| Flags activos para el mismo parámetro | `0` |
+| Rollback reciente | ninguno (cooldown 48h) |
+| Flags auto-aprobados activos simultáneos | máximo `1` |
 
-El rollback revierte si el deterioro supera el threshold en más del 60% de las muestras observadas, con ventana mínima de 8 turnos.
+El rollback es automático si el deterioro supera el threshold en más del 60% de las últimas 8+ muestras.
 
 ---
 
@@ -236,24 +225,19 @@ El rollback revierte si el deterioro supera el threshold en más del 60% de las 
 | AlterB5 Fase 1 | ✅ | Architecture state, code map, code auditor |
 | AlterB5 Fase 2 | ✅ | Hypothesis generator, experiment runner |
 | AlterB5 Fase 3 | ✅ | Feature flags, controlled promotion, rollback monitor |
-| AlterB5 Fase 4 | 🔜 | Proposals con pseudo-diffs, assisted refactor |
+| AlterB5 Fase 4 | ✅ | Proposals con pseudo-diffs, assisted refactor |
 
 ---
 
 ## Diseño filosófico
 
-ALTER está diseñada alrededor de la idea de **suspensión ecológica** — no optimizar un único eje sino mantener varios caminos posibles abiertos y elegir según el contexto. Esto se extiende hasta B5:
+**B3** — cerebro organizado: workspace, homeostasis, memoria estratificada, decisiones centralizadas.
 
-- Las hipótesis estructurales existen pero no se ejecutan solas — quedan en `no_replayable_yet`
-- Los cambios paramétricos pequeños se activan solos; los estructurales siempre requieren aprobación
-- El rollback es parte del diseño, no un mecanismo de emergencia
-- B5 puede entender y proponer cambios a su propio diseño, pero no los aplica ciegamente
+**B4** — cerebro que se mide: observabilidad, simulación, autoconocimiento operativo, políticas cognitivas, auditoría.
 
----
+**B5** — cerebro que entiende su implementación: lee su propio código, formula hipótesis, experimenta variantes, promueve cambios controlados, propone su siguiente versión.
 
-## Estado actual
-
-Experimento en curso activo. Lo que funciona: identidad coherente, auto-modificación de parámetros, memoria episódica, síntesis nocturna autónoma, feed diario, workspace cognitivo, modelo predictivo, simulador contrafáctico, self-model, meta-learning, auditoría semanal, lectura y auditoría del código propio, generación de hipótesis, experimentación paramétrica sobre telemetría histórica, y promoción controlada de mejoras con rollback automático.
+El principio central es **suspensión ecológica** — mantener caminos posibles abiertos y elegir según contexto. Esto se extiende al diseño de B5: los cambios pequeños y seguros se activan solos; los estructurales siempre requieren aprobación humana. El rollback es parte del diseño, no un mecanismo de emergencia.
 
 ---
 
