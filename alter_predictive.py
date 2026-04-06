@@ -331,8 +331,92 @@ def compute_prediction_error(
 
 
 # ============================================================
-# UPDATE — CICLO PRINCIPAL
+# UPDATE DIVIDIDO — PRE Y POST RESPUESTA
 # ============================================================
+
+def update_pre_response(
+    state: PredictiveState,
+    texto_input: str,
+    historial: list[tuple[str, str]],
+    homeostasis_snap: Optional[dict] = None,
+) -> PredictiveState:
+    """
+    Primera mitad del ciclo — corre ANTES de que Gemini responda.
+
+    Paso 1: Calcular error de predicción del turno anterior.
+    Paso 2: Inferir nuevas hipótesis de intención.
+    Paso 4: Guardar pending_prediction para el turno siguiente.
+
+    NO calcula predict_effect — eso requiere la respuesta real.
+    El expected_effect queda con valores neutros hasta update_post_response().
+    """
+    # Paso 1 — error del turno anterior
+    error = 0.0
+    if state.pending_prediction:
+        error = compute_prediction_error(
+            state.pending_prediction,
+            texto_input,
+            historial,
+        )
+
+    # Paso 2 — nuevas hipótesis
+    hipotesis = infer_intent(texto_input, historial, prior_state=state)
+
+    # Paso 4 — guardar pending para el turno siguiente
+    dominant = max(hipotesis, key=lambda h: h.confidence) if hipotesis else None
+    pending = {
+        "dominant_label":      dominant.label if dominant else "",
+        "dominant_confidence": dominant.confidence if dominant else 0.5,
+        "turn":                state.turn_count + 1,
+    } if dominant else None
+
+    # Paso 5 — actualizar historial de errores y confianza
+    error_history = (state.error_history + [error])[-20:]
+    model_confidence = float(np.clip(
+        1.0 - (sum(error_history) / len(error_history)) if error_history else 0.5,
+        0.0, 1.0
+    ))
+
+    return PredictiveState(
+        intent_hypotheses    = hipotesis,
+        expected_effect      = state.expected_effect,  # conservar hasta post_response
+        prediction_error_last= error,
+        error_history        = error_history,
+        model_confidence     = model_confidence,
+        pending_prediction   = pending,
+        turn_count           = state.turn_count + 1,
+        timestamp            = time.time(),
+    )
+
+
+def update_post_response(
+    state: PredictiveState,
+    respuesta_real: str,
+    homeostasis_snap: Optional[dict] = None,
+) -> PredictiveState:
+    """
+    Segunda mitad del ciclo — corre DESPUÉS de que Gemini responde.
+
+    Paso 3: Calcular predict_effect con la respuesta real de ALTER.
+
+    Retorna el estado actualizado con expected_effect preciso.
+    """
+    effect = predict_effect(
+        respuesta_real,
+        state.intent_hypotheses,
+        homeostasis_snap,
+    )
+    # Solo actualizar expected_effect — el resto ya está calculado
+    return PredictiveState(
+        intent_hypotheses    = state.intent_hypotheses,
+        expected_effect      = effect,
+        prediction_error_last= state.prediction_error_last,
+        error_history        = state.error_history,
+        model_confidence     = state.model_confidence,
+        pending_prediction   = state.pending_prediction,
+        turn_count           = state.turn_count,
+        timestamp            = state.timestamp,
+    )
 
 def update(
     state: PredictiveState,

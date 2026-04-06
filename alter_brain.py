@@ -40,6 +40,8 @@ try:
     from alter_workspace import GlobalWorkspace
     from alter_predictive import (
         PredictiveState, update as predictive_update,
+        update_pre_response as predictive_pre,
+        update_post_response as predictive_post,
         export_workspace_candidates, predictive_snapshot_str,
         serialize as pred_serialize, deserialize as pred_deserialize,
     )
@@ -102,6 +104,40 @@ REDIS_KEY_REPUTACION = "alter:reputacion"
 # PIZARRA_DEFAULT, prompts y lógica de mente vienen de alter_persona y alter_mind
 
 PROMPT_UNIFICADO = """
+ESTADO ACTUAL:
+Valencia: {v:.2f} | Activación: {a:.2f} | Autoridad: {p:.2f}
+Tono emocional: {tono_emocional}
+Campo mental: {campo_mental}
+Economía mental: {economia_mental}
+Cansancio: {cansancio_activo} ({cansancio:.2f})
+
+PIZARRA (decisiones inamovibles — solo para detectar colisiones):
+{pizarra}
+
+MEMORIA ACTIVA (lo que importa ahora — identidad, episodios, mundo, patrones):
+{memoria_activa}
+
+REPUTACIÓN POR TEMA (tu historial de aciertos — afecta tu confianza):
+{reputacion}
+
+DRIVES ACTUALES (tu motivación interna ahora):
+Curiosidad: {curiosidad:.2f} | Expresión: {expresion:.2f} | Conexión: {conexion:.2f} | Eficiencia: {eficiencia:.2f}
+
+CONTEXTO RECIENTE:
+{motivos}
+
+LO QUE DIJISTE ANTES (sé consistente):
+{historial}
+
+SECUENCIA ACTIVA: {secuencia}
+
+{interlocutor} dijo: "{texto}"
+
+RESPONDÉ ÚNICAMENTE EN JSON.
+"""
+
+# Prompt legacy — usado como fallback si AlterB3 no está disponible
+PROMPT_UNIFICADO_LEGACY = """
 ESTADO ACTUAL:
 Valencia: {v:.2f} | Activación: {a:.2f} | Autoridad: {p:.2f}
 Tono emocional: {tono_emocional}
@@ -1854,6 +1890,61 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
             return "Ninguno aún."
         return "\n".join(f"- [{m['t']}] {m['m']}" for m in self.motivos_recientes[-5:])
 
+    def _formatear_memoria_activa(self) -> str:
+        """
+        Reemplaza los seis _formatear_* legacy.
+        Usa memory.snapshot_for_prompt() con contexto predictivo actual.
+        Solo disponible cuando AlterB3 está activo.
+        """
+        if not ALTERB3_ENABLED or not hasattr(self, "memory"):
+            # Fallback al formato viejo concatenado
+            partes = []
+            interlocutor = self._formatear_memoria_interlocutor()
+            if interlocutor and "Primera vez" not in interlocutor:
+                partes.append(f"Persona: {interlocutor}")
+            autobio = self._formatear_autobiografia()
+            if autobio and autobio != "Sin narrativa aún.":
+                partes.append(f"Narrativa: {autobio[:200]}")
+            episodios = self._formatear_episodios()
+            if episodios and episodios != "Sin episodios aún.":
+                partes.append(f"Episodios: {episodios}")
+            agenda = self._formatear_agenda()
+            if agenda and agenda != "Ningún pendiente.":
+                partes.append(f"Agenda: {agenda}")
+            mundo = self._formatear_mundo()
+            if mundo and mundo != "Grafo vacío.":
+                partes.append(f"Mundo: {mundo}")
+            ideas = self._formatear_ideas()
+            if ideas and ideas != "Ninguna aún.":
+                partes.append(f"Ideas: {ideas}")
+            return "\n\n".join(partes) or "Sin memoria disponible."
+
+        # Construir contexto procedural desde estado predictivo
+        procedural_context = {}
+        if hasattr(self, "predictive") and self.predictive.intent_hypotheses:
+            dominant = self.predictive.dominant_hypothesis()
+            if dominant:
+                procedural_context["user_intent"] = dominant.label
+                procedural_context["prediction_error_high"] = (
+                    self.predictive.prediction_error_last > 0.6
+                )
+        if hasattr(self, "workspace"):
+            procedural_context["workspace_has_goal"] = bool(
+                self.workspace.dominant_goal()
+            )
+        if hasattr(self, "homeostasis"):
+            from alter_homeostasis import homeostasis_snapshot
+            hs_snap = homeostasis_snapshot(self.homeostasis)
+            procedural_context["homeostasis_mode"] = hs_snap.get(
+                "modo_sugerido", "exploracion"
+            )
+
+        return self.memory.snapshot_for_prompt(
+            procedural_context=procedural_context,
+            n_episodes=3,
+            n_nodes=5,
+        )
+
     def _formatear_historial(self) -> str:
         if not self.historial_completo:
             return "Nada aún."
@@ -1902,8 +1993,8 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
             self._sync_alterb3_from_vector()
             hs_snap = homeostasis_snapshot(self.homeostasis)
 
-            # Predictive Model — update con texto actual
-            self.predictive = predictive_update(
+            # Predictive Model — paso 1: inferencia + error (antes de Gemini)
+            self.predictive = predictive_pre(
                 self.predictive,
                 texto_input,
                 self.historial_completo,
@@ -1923,6 +2014,25 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
         )
 
         prompt = PROMPT_UNIFICADO.format(
+            v=self.v, a=self.a, p=self.p,
+            tono_emocional=self.tono_emocional_str(),
+            campo_mental=self.campo_str(),
+            economia_mental=economia_str(self.economia),
+            cansancio_activo="SÍ" if self.cansancio_activo else "NO",
+            cansancio=self.nivel_cansancio,
+            pizarra=self._formatear_pizarra(),
+            memoria_activa=self._formatear_memoria_activa(),
+            reputacion=self.reputacion_str(),
+            curiosidad=self.drives["curiosidad"],
+            expresion=self.drives["expresion"],
+            conexion=self.drives["conexion"],
+            eficiencia=self.drives["eficiencia"],
+            motivos=self._formatear_motivos(),
+            historial=self._formatear_historial(),
+            secuencia=self.secuencia_activa or "Ninguna",
+            interlocutor=interlocutor,
+            texto=texto_input
+        ) if ALTERB3_ENABLED else PROMPT_UNIFICADO_LEGACY.format(
             v=self.v, a=self.a, p=self.p,
             tono_emocional=self.tono_emocional_str(),
             campo_mental=self.campo_str(),
@@ -1998,6 +2108,16 @@ DEBATE INTERNO (no lo menciones, pero usalo para pensar):
             data = self._parsear_respuesta(response.text)
             # Pasar tensión del Council para que la economía la consuma
             data["_council_tension"] = council_tension
+            # AlterB3 — paso 2 del predictive: predict_effect con respuesta real
+            if ALTERB3_ENABLED:
+                respuesta_real = data.get("respuesta", "")
+                if respuesta_real:
+                    hs_snap_post = homeostasis_snapshot(self.homeostasis)
+                    self.predictive = predictive_post(
+                        self.predictive,
+                        respuesta_real,
+                        homeostasis_snap=hs_snap_post,
+                    )
             # Guardar traza cognitiva
             self.guardar_traza({
                 "input": texto_input,

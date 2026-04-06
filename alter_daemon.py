@@ -1106,9 +1106,26 @@ async def ciclo_drives(ultimo_drives: float) -> float:
         f"eficiencia:{drives_nuevo.get('eficiencia',0):.2f}"
     )
 
+    # AlterB3 — recover_state si el usuario está ausente
+    # Si lleva tiempo sin conversación, la homeostasis se recupera
+    ausente = usuario_ausente()
+    if ausente:
+        try:
+            from alter_homeostasis import deserialize as hs_deserialize, recover_state, serialize as hs_serialize
+            raw = redis.get("alter:homeostasis:state")
+            if raw:
+                hs = hs_deserialize(raw)
+                hs_recuperada = recover_state(hs, delta_time=dt_horas)
+                redis.set("alter:homeostasis:state", hs_serialize(hs_recuperada))
+                log(f"[B3] Homeostasis recuperada: "
+                    f"energia:{hs_recuperada.energia:.2f} "
+                    f"fatiga:{hs_recuperada.fatiga:.2f} "
+                    f"claridad:{hs_recuperada.claridad:.2f}")
+        except Exception as e:
+            log(f"[B3] recover_state error: {e}")
+
     # Si algún drive supera el umbral y no hay mensaje pendiente, generar uno
     # Solo si el usuario está ausente — no interrumpir si está activo
-    ausente = usuario_ausente()
     if not hay_mensaje_pendiente() and ausente:
         if drives_nuevo["expresion"] >= UMBRAL_INICIATIVA or \
            drives_nuevo["curiosidad"] >= UMBRAL_INICIATIVA:
@@ -1678,4 +1695,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n[ALTER daemon detenido]")
-
