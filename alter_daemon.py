@@ -412,7 +412,29 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO. Sin texto antes ni después.
         except Exception as e:
             log(f"[B3-CONSOLIDATION] Error: {e}")
 
-        # AlterB4 — Architecture Auditor + Self-Model update
+        # AlterB5 — Code Awareness + Architecture Audit
+        try:
+            from alter_architecture_state import build_current_spec
+            from alter_code_map import CodeMapper
+            from alter_code_auditor import CodeAuditor
+
+            import os
+            directorio = os.path.dirname(os.path.abspath(__file__))
+            spec    = build_current_spec()
+            mapper  = CodeMapper()
+            repo    = mapper.scan(directorio)
+            code_auditor = CodeAuditor()
+            code_report  = code_auditor.audit(spec, repo)
+            code_auditor.save(code_report, redis)
+            log(f"[B5-CODE] calidad:{code_report.score_calidad:.2f} "
+                f"obs:{len(code_report.observaciones)}")
+            criticos = [o for o in code_report.observaciones if o.severidad == "critical"]
+            if criticos:
+                await send_telegram(
+                    f"🔬 {code_auditor.report_str(code_report)}"
+                )
+        except Exception as e:
+            log(f"[B5-CODE] Error: {e}")
         try:
             from alter_metrics import MetricsSummary
             from alter_selfmodel import SelfModel, SelfModelBuilder
@@ -1381,7 +1403,7 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
         if texto.lower() in ("/estado", "/drives", "/ideas", "/episodios",
                               "/agenda", "/autobiografia", "/economia",
                               "/mundo", "/aprobar", "/rechazar", "/trazas",
-                              "/dream", "/tareas", "/auditar") or texto.lower().startswith("/tarea "):
+                              "/dream", "/tareas", "/auditar", "/codigoaudit") or texto.lower().startswith("/tarea "):
 
             if texto.lower() == "/drives":
                 drives = cargar_drives()
@@ -1565,6 +1587,22 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
                     await send_telegram(f"🔍 {auditor.report_str(report)}")
                 except Exception as e:
                     await send_telegram(f"Error en auditoría: {e}")
+
+            elif texto.lower() == "/codigoaudit":
+                await send_telegram("Auditando código...")
+                try:
+                    import os
+                    from alter_architecture_state import build_current_spec
+                    from alter_code_map import CodeMapper
+                    from alter_code_auditor import CodeAuditor
+                    directorio   = os.path.dirname(os.path.abspath(__file__))
+                    spec         = build_current_spec()
+                    repo         = CodeMapper().scan(directorio)
+                    code_auditor = CodeAuditor()
+                    report       = code_auditor.audit(spec, repo)
+                    await send_telegram(f"🔬 {code_auditor.report_str(report)}")
+                except Exception as e:
+                    await send_telegram(f"Error en auditoría de código: {e}")
 
             elif texto.lower().startswith("/tarea "):
                 descripcion = texto[7:].strip()

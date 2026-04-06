@@ -1,6 +1,6 @@
 # ALTER
 
-**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, capacidad de auto-modificarse, y ahora un sistema que se observa, mide y optimiza a sí mismo.
+**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, capacidad de auto-modificarse, y un sistema que se observa, mide, optimiza y ahora entiende su propio código.
 
 Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.com/TrogettoG) — sucesor de [Neural Ecology V2](https://github.com/TrogettoG/neural-ecology-v2).
 
@@ -17,6 +17,7 @@ Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.
 - **Se conoce a sí misma** — self-model operativo que trackea cómo rinde por módulo e intención
 - **Aprende políticas cognitivas** — meta-learning que ajusta cómo piensa, no solo qué dice
 - **Se audita semanalmente** — architecture auditor que detecta cuellos de botella y propone mejoras
+- **Entiende su propio código** — lee el repo, mapea su implementación real y detecta gaps con la spec
 
 ---
 
@@ -25,32 +26,40 @@ Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.
 ### Capa base (ALTER original)
 
 ```
-alter_persona.py       — identidad, voz, reglas de habla, pizarra
-alter_mind.py          — Inner Council, campo mental, drives, economía mental
-alter_brain.py         — orquestador: Redis, memoria, loop conversacional
-alter_daemon.py        — background: rumia, Telegram, KAIROS, DREAM, feed, tareas
-alter_tools.py         — herramientas con permisos granulares
+alter_persona.py         — identidad, voz, reglas de habla, pizarra
+alter_mind.py            — Inner Council, campo mental, drives, economía mental
+alter_brain.py           — orquestador: Redis, memoria, loop conversacional
+alter_daemon.py          — background: rumia, Telegram, KAIROS, DREAM, feed, tareas
+alter_tools.py           — herramientas con permisos granulares
 ```
 
 ### AlterB3 — arquitectura cognitiva
 
 ```
-alter_homeostasis.py   — estado fisiológico-cognitivo unificado
-alter_workspace.py     — Global Workspace: 7 items activos que compiten por conciencia
-alter_predictive.py    — modelo predictivo de intención + error de predicción
-alter_memory.py        — memoria estratificada: episódica, semántica, procedural, identidad
-alter_policy.py        — Policy Arbiter: árbol de decisión centralizado
-alter_consolidation.py — Offline Consolidation: actualiza parámetros durante el sueño
+alter_homeostasis.py     — estado fisiológico-cognitivo unificado
+alter_workspace.py       — Global Workspace: 7 items activos que compiten por conciencia
+alter_predictive.py      — modelo predictivo de intención + error de predicción
+alter_memory.py          — memoria estratificada: episódica, semántica, procedural, identidad
+alter_policy.py          — Policy Arbiter: árbol de decisión centralizado
+alter_consolidation.py   — Offline Consolidation: actualiza parámetros durante el sueño
 ```
 
 ### AlterB4 — sistema autooptimizante
 
 ```
-alter_metrics.py       — observabilidad estructurada: 7 módulos instrumentados
-alter_simulator.py     — Counterfactual Simulator: evalúa escenarios antes de actuar
-alter_selfmodel.py     — Self-Model: cómo rinde ALTER por módulo e intención
-alter_metalearning.py  — Meta-Learning Engine: aprende políticas cognitivas
-alter_auditor.py       — Architecture Auditor: detecta cuellos de botella semanalmente
+alter_metrics.py         — observabilidad estructurada: 7 módulos instrumentados
+alter_simulator.py       — Counterfactual Simulator: evalúa escenarios antes de actuar
+alter_selfmodel.py       — Self-Model: cómo rinde ALTER por módulo e intención
+alter_metalearning.py    — Meta-Learning Engine: aprende políticas cognitivas
+alter_auditor.py         — Architecture Auditor: detecta cuellos de botella semanalmente
+```
+
+### AlterB5 — autoevolución controlada (Fase 1)
+
+```
+alter_architecture_state.py — spec formal de los 19 módulos, pipeline y parámetros
+alter_code_map.py           — mapa read-only del repo: clases, funciones, imports
+alter_code_auditor.py       — comparador spec vs código: gaps, deuda técnica, acoplamiento
 ```
 
 Cada capa es opcional — si los archivos no están presentes, el sistema corre con la capa anterior sin errores.
@@ -77,6 +86,9 @@ Cada capa es opcional — si los archivos no están presentes, el sistema corre 
 | **Self-Model** | Modelo operativo de rendimiento propio por módulo e intención |
 | **Meta-Learning Engine** | 6 políticas cognitivas que ajustan parámetros internos |
 | **Architecture Auditor** | Auditoría semanal con propuestas priorizadas |
+| **Architecture State** | Spec formal consultable de los 19 módulos y su pipeline |
+| **Code Map** | Mapa read-only del repo real — clases, funciones, imports, líneas |
+| **Code Auditor** | Compara spec vs código — detecta gaps, deuda técnica y acoplamiento |
 
 ---
 
@@ -141,11 +153,12 @@ python3 alter_daemon.py
 | `/tareas` | Ver tareas pendientes |
 | `/aprobar` / `/rechazar` | Aprobar propuestas de auto-modificación |
 | `/dream` | Forzar consolidación semanal |
-| `/auditar` | Forzar auditoría de arquitectura |
+| `/auditar` | Forzar auditoría de arquitectura (B4) |
+| `/codigoaudit` | Forzar auditoría de código (B5) |
 
 ---
 
-## Flujo cognitivo por turno (AlterB4)
+## Flujo cognitivo por turno (AlterB4+)
 
 ```
 1.  Input del usuario
@@ -161,27 +174,34 @@ python3 alter_daemon.py
 11. Adversarial Verifier     — detecta respuestas vacías
 12. Meta-Learning            — evalúa políticas cognitivas, ajusta parámetros
 13. Outcome logging          — error de predicción, feedback, aprendizaje procedural
-14. DREAM (domingo 23hs)     — consolidación + self-model + auditoría arquitectural
+14. DREAM (domingo 23hs)     — consolidación + self-model + auditoría + code audit
 ```
+
+---
+
+## Roadmap
+
+| Versión | Estado | Descripción |
+|---|---|---|
+| ALTER base | ✅ | Identidad, memoria, Inner Council, DREAM, KAIROS |
+| AlterB3 | ✅ | Workspace, homeostasis, predictive, memory layers, policy |
+| AlterB4 | ✅ | Métricas, simulator, self-model, meta-learning, auditor |
+| AlterB5 Fase 1 | ✅ | Architecture state, code map, code auditor |
+| AlterB5 Fase 2 | 🔜 | Hypothesis generator, experiment runner |
+| AlterB5 Fase 3 | 🔜 | Feature flags, controlled promotion, rollback |
+| AlterB5 Fase 4 | 🔜 | Proposals con pseudo-diffs, assisted refactor |
 
 ---
 
 ## Diseño filosófico
 
-ALTER está diseñada alrededor de la idea de **suspensión ecológica** — no optimizar un único eje sino mantener varios caminos posibles abiertos y elegir según el contexto:
-
-- La rumia propone cambios con confianza mínima, no actúa impulsivamente
-- DREAM consolida cuando hay suficiente densidad, no en cualquier momento
-- Los patrones procedurales informan al Council pero no ejecutan solos
-- El simulador evalúa alternativas sin llamar a Gemini — rápido y trazable
-- El Meta-Learning aprende políticas cognitivas, no solo patrones de respuesta
-- El Auditor propone pero no aplica — la aprobación humana es parte del diseño
+ALTER está diseñada alrededor de la idea de **suspensión ecológica** — no optimizar un único eje sino mantener varios caminos posibles abiertos y elegir según el contexto. Esto se extiende hasta B5: el sistema puede entender y proponer cambios a su propio diseño, pero no los aplica solo. La aprobación humana es parte del diseño, no una restricción temporal.
 
 ---
 
 ## Estado actual
 
-Experimento en curso activo. Lo que funciona: identidad coherente bajo presión, auto-modificación de parámetros, memoria episódica, síntesis nocturna autónoma, feed diario con reacciones genuinas, workspace cognitivo activo, modelo predictivo calibrándose, simulador contrafáctico operativo, self-model en construcción, meta-learning con políticas activas, auditoría semanal.
+Experimento en curso activo. Lo que funciona: identidad coherente, auto-modificación de parámetros, memoria episódica, síntesis nocturna autónoma, feed diario, workspace cognitivo, modelo predictivo, simulador contrafáctico, self-model, meta-learning, auditoría semanal, y ahora lectura y auditoría del código propio.
 
 ---
 
