@@ -313,6 +313,17 @@ class AlterBrain:
         # B4 — Meta-Learning + Auditor
         self.metalearning = MetaLearningEngine(redis_client=self.redis)
         self.auditor      = ArchitectureAuditor(redis_client=self.redis)
+
+        # B5 — Feature Flags: leer y aplicar parámetros activos
+        try:
+            from alter_feature_flags import load_flags, apply_active_flags, get_active_param
+            self._b5_flags = load_flags(self.redis)
+            aplicados = apply_active_flags(self._b5_flags, self.redis)
+            if aplicados:
+                print(f"[B5-FLAGS] Parámetros activos: {aplicados}")
+        except Exception:
+            self._b5_flags = []
+
         print(f"[B4] MetricsCollector + Simulator + SelfModel + MetaLearning + Auditor OK")
 
     def _sync_alterb3_from_vector(self):

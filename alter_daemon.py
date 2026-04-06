@@ -482,6 +482,33 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO. Sin texto antes ni después.
                     msg = runner.snapshot_str(mejoras)
                     await send_telegram(f"🧪 {msg}")
 
+            # B5 Fase 3 — Controlled Promotion
+            try:
+                from alter_feature_flags import (
+                    ControlledPromotion, load_flags, save_flags,
+                    apply_active_flags, log_flag_event, snapshot_str as flags_snapshot
+                )
+                promotion    = ControlledPromotion()
+                flags_actuales = load_flags(redis)
+                nuevos_flags = promotion.evaluate_experiments(results, todas, flags_actuales)
+                if nuevos_flags:
+                    for f in nuevos_flags:
+                        evento = "auto_aprobado" if f.auto_approved else "creado"
+                        log_flag_event(f, evento,
+                            f"{f.parametro}: {f.valor_actual}→{f.valor_nuevo}", redis)
+                        log(f"[B5-FLAG] {evento}: {f.parametro} "
+                            f"{f.valor_actual}→{f.valor_nuevo} "
+                            f"({'auto' if f.auto_approved else 'pendiente'})")
+                    todos_flags = flags_actuales + nuevos_flags
+                    save_flags(todos_flags, redis)
+                    aplicados = apply_active_flags(todos_flags, redis)
+                    if aplicados:
+                        await send_telegram(
+                            f"🚀 Flags activos:\n{flags_snapshot(todos_flags)}"
+                        )
+            except Exception as e:
+                log(f"[B5-PROMOTION] Error: {e}")
+
         except Exception as e:
             log(f"[B5-HYP/EXP] Error: {e}")
         try:
@@ -1229,6 +1256,33 @@ async def ciclo_drives(ultimo_drives: float) -> float:
                     f"claridad:{hs_recuperada.claridad:.2f}")
         except Exception as e:
             log(f"[B3] recover_state error: {e}")
+
+    # AlterB5 — RollbackMonitor: chequear flags activos
+    try:
+        from alter_feature_flags import (
+            RollbackMonitor, load_flags, save_flags,
+            log_flag_event, snapshot_str as flags_snapshot
+        )
+        flags = load_flags(redis)
+        activos = [f for f in flags if f.esta_activo()]
+        if activos:
+            monitor    = RollbackMonitor()
+            revertidos = monitor.check(activos, redis)
+            if revertidos:
+                save_flags(flags, redis)
+                for f in revertidos:
+                    log_flag_event(f, "rollback", f.motivo_rollback, redis)
+                    log(f"[B5-ROLLBACK] {f.parametro} revertido: {f.motivo_rollback}")
+                    await send_telegram(
+                        f"⚠️ Rollback automático:\n"
+                        f"{f.parametro}: {f.valor_nuevo}→{f.valor_actual}\n"
+                        f"Motivo: {f.motivo_rollback}"
+                    )
+            else:
+                # Actualizar samples observados y persistir
+                save_flags(flags, redis)
+    except Exception as e:
+        log(f"[B5-ROLLBACK] Error: {e}")
 
     # Si algún drive supera el umbral y no hay mensaje pendiente, generar uno
     # Solo si el usuario está ausente — no interrumpir si está activo

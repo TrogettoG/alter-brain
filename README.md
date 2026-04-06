@@ -1,6 +1,6 @@
 # ALTER
 
-**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, capacidad de auto-modificarse, y un sistema que se observa, mide, optimiza, entiende su propio código y experimenta variantes de sí misma.
+**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, capacidad de auto-modificarse, y un sistema que se observa, mide, optimiza, entiende su propio código, experimenta variantes y promueve mejoras de forma controlada.
 
 Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.com/TrogettoG) — sucesor de [Neural Ecology V2](https://github.com/TrogettoG/neural-ecology-v2).
 
@@ -20,6 +20,7 @@ Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.
 - **Entiende su propio código** — lee el repo, mapea su implementación real y detecta gaps con la spec
 - **Formula hipótesis sobre sí misma** — genera hipótesis de mejora desde observaciones reales
 - **Experimenta sin riesgo** — prueba variantes paramétricas contra telemetría histórica sin tocar producción
+- **Promueve mejoras controladas** — activa cambios seguros automáticamente con rollback vigilado
 
 ---
 
@@ -59,11 +60,12 @@ alter_auditor.py              — Architecture Auditor: detecta cuellos de botel
 ### AlterB5 — autoevolución controlada
 
 ```
-alter_architecture_state.py   — spec formal de los 19 módulos, pipeline y parámetros
-alter_code_map.py             — mapa read-only del repo: clases, funciones, imports
-alter_code_auditor.py         — comparador spec vs código: gaps, deuda técnica, acoplamiento
+alter_architecture_state.py      — spec formal de los 19 módulos, pipeline y parámetros
+alter_code_map.py                — mapa read-only del repo: clases, funciones, imports
+alter_code_auditor.py            — comparador spec vs código: gaps, deuda técnica, acoplamiento
 alter_architecture_hypotheses.py — generador de hipótesis desde observaciones reales
-alter_experiments.py          — Experiment Runner: prueba variantes sobre telemetría histórica
+alter_experiments.py             — Experiment Runner: prueba variantes sobre telemetría histórica
+alter_feature_flags.py           — Feature Flags + Controlled Promotion + Rollback Monitor
 ```
 
 Cada capa es opcional — si los archivos no están presentes, el sistema corre con la capa anterior sin errores.
@@ -95,6 +97,7 @@ Cada capa es opcional — si los archivos no están presentes, el sistema corre 
 | **Code Auditor** | Compara spec vs código — detecta gaps, deuda técnica y acoplamiento |
 | **Hypothesis Generator** | Formula hipótesis de mejora desde observaciones reales |
 | **Experiment Runner** | Prueba variantes paramétricas sobre telemetría sin tocar producción |
+| **Feature Flags** | Activa cambios seguros automáticamente con rollback vigilado por ventana |
 
 ---
 
@@ -185,15 +188,41 @@ python3 alter_daemon.py
 ## Ciclo DREAM (domingo 23hs)
 
 ```
-1.  Consolidación de memoria  — episodios, ideas, grafo del mundo
-2.  Offline Consolidation     — actualiza patrones y confianza predictiva (B3)
-3.  Self-Model update         — recalibra rendimiento por módulo e intención (B4)
-4.  Meta-Learning             — evalúa políticas cognitivas activas (B4)
-5.  Architecture Auditor      — detecta cuellos de botella, genera propuestas (B4)
-6.  Code Auditor              — compara spec vs código real (B5)
-7.  Hypothesis Generator      — formula hipótesis desde observaciones (B5)
-8.  Experiment Runner         — prueba variantes replayables sobre telemetría (B5)
+1.  Consolidación de memoria     — episodios, ideas, grafo del mundo
+2.  Offline Consolidation (B3)   — actualiza patrones y confianza predictiva
+3.  Self-Model update (B4)       — recalibra rendimiento por módulo e intención
+4.  Meta-Learning (B4)           — evalúa políticas cognitivas activas
+5.  Architecture Auditor (B4)    — detecta cuellos de botella, genera propuestas
+6.  Code Auditor (B5)            — compara spec vs código real
+7.  Hypothesis Generator (B5)    — formula hipótesis desde observaciones
+8.  Experiment Runner (B5)       — prueba variantes replayables sobre telemetría
+9.  Controlled Promotion (B5)    — activa cambios seguros, crea flags pendientes
 ```
+
+## Ciclo drives (cada 30 min)
+
+```
+1.  Actualiza drives
+2.  recover_state homeostasis (si usuario ausente)
+3.  RollbackMonitor — chequea flags activos, revierte si hay deterioro sostenido
+4.  Mensaje proactivo si drive supera umbral
+```
+
+---
+
+## Reglas de auto-aprobación de flags (B5)
+
+Un cambio paramétrico se activa automáticamente solo si cumple las 7 condiciones:
+
+1. `riesgo == "bajo"`
+2. `confianza >= 0.70`
+3. `experiment.mejora == True`
+4. delta acotado (≤ 20% del valor baseline)
+5. no hay flag activo para el mismo parámetro
+6. no hubo rollback reciente (cooldown 48h)
+7. un solo flag auto-aprobado activo por vez
+
+El rollback revierte si el deterioro supera el threshold en más del 60% de las muestras observadas, con ventana mínima de 8 turnos.
 
 ---
 
@@ -206,7 +235,7 @@ python3 alter_daemon.py
 | AlterB4 | ✅ | Métricas, simulator, self-model, meta-learning, auditor |
 | AlterB5 Fase 1 | ✅ | Architecture state, code map, code auditor |
 | AlterB5 Fase 2 | ✅ | Hypothesis generator, experiment runner |
-| AlterB5 Fase 3 | 🔜 | Feature flags, controlled promotion, rollback |
+| AlterB5 Fase 3 | ✅ | Feature flags, controlled promotion, rollback monitor |
 | AlterB5 Fase 4 | 🔜 | Proposals con pseudo-diffs, assisted refactor |
 
 ---
@@ -216,15 +245,15 @@ python3 alter_daemon.py
 ALTER está diseñada alrededor de la idea de **suspensión ecológica** — no optimizar un único eje sino mantener varios caminos posibles abiertos y elegir según el contexto. Esto se extiende hasta B5:
 
 - Las hipótesis estructurales existen pero no se ejecutan solas — quedan en `no_replayable_yet`
-- Los experimentos usan telemetría real pero no tocan producción
-- La aprobación humana es parte del diseño, no una restricción temporal
-- B5 puede entender y proponer cambios a su propio diseño, pero no los aplica solo
+- Los cambios paramétricos pequeños se activan solos; los estructurales siempre requieren aprobación
+- El rollback es parte del diseño, no un mecanismo de emergencia
+- B5 puede entender y proponer cambios a su propio diseño, pero no los aplica ciegamente
 
 ---
 
 ## Estado actual
 
-Experimento en curso activo. Lo que funciona: identidad coherente, auto-modificación de parámetros, memoria episódica, síntesis nocturna autónoma, feed diario, workspace cognitivo, modelo predictivo, simulador contrafáctico, self-model, meta-learning, auditoría semanal, lectura y auditoría del código propio, generación de hipótesis estructurales, y experimentación paramétrica sobre telemetría histórica.
+Experimento en curso activo. Lo que funciona: identidad coherente, auto-modificación de parámetros, memoria episódica, síntesis nocturna autónoma, feed diario, workspace cognitivo, modelo predictivo, simulador contrafáctico, self-model, meta-learning, auditoría semanal, lectura y auditoría del código propio, generación de hipótesis, experimentación paramétrica sobre telemetría histórica, y promoción controlada de mejoras con rollback automático.
 
 ---
 
