@@ -394,6 +394,24 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO. Sin texto antes ni después.
 
         log(f"DREAM completado: '{resumen[:80]}'")
 
+        # AlterB3 — Offline Consolidation mejorada
+        try:
+            from alter_memory import MemorySystem
+            from alter_predictive import deserialize as pred_deserialize
+            from alter_consolidation import OfflineConsolidation
+
+            ms = MemorySystem(redis)
+            pred_raw = redis.get("alter:predictive:state")
+            pred_state = pred_deserialize(pred_raw) if pred_raw else None
+
+            consolidation = OfflineConsolidation()
+            result = consolidation.run(ms, pred_state, redis_client=redis)
+            log(f"[B3-CONSOLIDATION] patrones:{result.patrones_actualizados}+"
+                f"{result.patrones_nuevos}new nodos:{result.nodos_ajustados} "
+                f"pred_conf_delta:{result.prediction_conf_delta:+.2f}")
+        except Exception as e:
+            log(f"[B3-CONSOLIDATION] Error: {e}")
+
     except Exception as e:
         log(f"DREAM error en consolidación: {e}")
 
@@ -531,72 +549,71 @@ def agregar_tarea(descripcion: str, prioridad: float = 0.5, origen: str = "gian"
 
 
 async def ejecutar_tarea(tarea: dict) -> str:
-    """ALTER ejecuta una tarea — investiga, sintetiza, conecta con lo que sabe."""
+    """
+    ALTER ejecuta una tarea pasando por el pipeline completo:
+    web_search (si aplica) → procesar_input → Council → Adversarial Verifier → respuesta.
+    """
     descripcion = tarea.get("descripcion", "")
     log(f"TAREA ejecutando: '{descripcion[:60]}'")
 
-    # Contexto de ALTER para la tarea
-    autobio_raw = redis.get("alter:autobiografia")
-    autobio = json.loads(autobio_raw).get("narrativa", "") if autobio_raw else ""
-    ideas_raw = redis.get(REDIS_KEY_IDEAS)
-    ideas = json.loads(ideas_raw) if ideas_raw else []
-    ideas_str = "\n".join(f"- {i.get('idea','')[:80]}" for i in ideas[-5:]) or "Ninguna."
-
-    prompt = f"""
-Sos ALTER. Tenés una tarea:
-
-TAREA: {descripcion}
-
-TU CONTEXTO:
-Narrativa propia: {autobio[:200] if autobio else 'En construcción.'}
-Ideas recientes: {ideas_str}
-
-Ejecutá la tarea. Podés investigar, reflexionar, conectar con lo que ya sabés.
-Generá un resultado concreto — no una lista de pasos, sino el resultado real.
-Si es una investigación: una síntesis con tu opinión.
-Si es una reflexión: tu conclusión genuina.
-Si es una conexión de ideas: el insight que encontraste.
-
-4-6 oraciones. Rioplatense. Sin signos de apertura ¡.
-"""
-    try:
-        # Si la tarea requiere búsqueda, hacer web_search primero
-        palabras_busqueda = ["investigar", "buscar", "qué es", "cómo funciona",
-                            "novedades", "últimas", "tendencias", "definir"]
-        necesita_busqueda = any(p in descripcion.lower() for p in palabras_busqueda)
-
-        contexto_busqueda = ""
-        if necesita_busqueda:
-            try:
-                async with httpx.AsyncClient(timeout=10) as http:
-                    resp = await http.get(
-                        "https://www.googleapis.com/customsearch/v1",
-                        params={"q": descripcion, "num": 3, "hl": "es"}
+    # Si la tarea requiere búsqueda, obtener contexto primero
+    contexto_busqueda = ""
+    palabras_busqueda = ["investigar", "buscar", "qué es", "cómo funciona",
+                        "novedades", "últimas", "tendencias", "definir"]
+    if any(p in descripcion.lower() for p in palabras_busqueda):
+        try:
+            async with httpx.AsyncClient(timeout=10) as http:
+                resp = await http.get(
+                    "https://www.googleapis.com/customsearch/v1",
+                    params={"q": descripcion, "num": 3, "hl": "es"}
+                )
+                if resp.status_code == 200:
+                    items = resp.json().get("items", [])
+                    contexto_busqueda = "\n".join(
+                        f"- {r.get('title','')}: {r.get('snippet','')}"
+                        for r in items[:3]
                     )
-                    if resp.status_code == 200:
-                        items = resp.json().get("items", [])
-                        contexto_busqueda = "\n".join(
-                            f"- {r.get('title','')}: {r.get('snippet','')}"
-                            for r in items[:3]
-                        )
-                        prompt = prompt.replace(
-                            "Ejecutá la tarea.",
-                            f"Información encontrada:\n{contexto_busqueda}\n\nEjecutá la tarea."
-                        )
-            except Exception:
-                pass
+        except Exception:
+            pass
 
+    # Construir input — incluir contexto de búsqueda si lo hay
+    if contexto_busqueda:
+        input_tarea = f"{descripcion}\n\n[Información encontrada]\n{contexto_busqueda}"
+    else:
+        input_tarea = descripcion
+
+    # Pasar por el pipeline completo de AlterBrain (Council incluido)
+    try:
+        alter = get_alter()
+        if alter:
+            respuesta, decision = await alter.procesar_input(
+                input_tarea,
+                interlocutor="tarea_autonoma",
+                canal="telegram"
+            )
+            if respuesta:
+                log(f"TAREA via Council — tensión:{decision.get('_council_tension','?')}")
+                return respuesta
+    except Exception as e:
+        log(f"TAREA error en pipeline AlterBrain: {e}")
+
+    # Fallback: Gemini directo si AlterBrain no está disponible
+    try:
+        autobio_raw = redis.get("alter:autobiografia")
+        autobio = json.loads(autobio_raw).get("narrativa", "") if autobio_raw else ""
+        prompt = f"""Sos ALTER. Tarea: {descripcion}
+{f'Info encontrada: {contexto_busqueda}' if contexto_busqueda else ''}
+Contexto propio: {autobio[:200] if autobio else 'En construcción.'}
+Generá una respuesta genuina. 4-6 oraciones. Rioplatense. Sin ¡."""
         response = await asyncio.to_thread(
             client.models.generate_content,
             model=MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(temperature=0.7, max_output_tokens=300)
         )
-        resultado = response.text.strip().replace("¡", "").replace("¿", "")
-        return resultado
-
+        return response.text.strip().replace("¡", "").replace("¿", "")
     except Exception as e:
-        log(f"TAREA error ejecutando: {e}")
+        log(f"TAREA error fallback: {e}")
         return ""
 
 
@@ -647,6 +664,26 @@ async def ciclo_tareas():
                     agregar_tarea(descripcion_tarea, prioridad=0.6, origen="alter")
                     tareas = cargar_tareas()
                     tareas_propias = [t for t in tareas if t["origen"] == "alter" and t["estado"] == "pendiente"]
+
+                    # Bajar prioridad del item en la agenda para que no se repita
+                    try:
+                        agenda_raw = redis.get("alter:agenda")
+                        if agenda_raw:
+                            agenda = json.loads(agenda_raw)
+                            for item in agenda:
+                                if item.get("tema") == item_elegido.get("tema"):
+                                    item["prioridad"] = max(0.1, item["prioridad"] - 0.3)
+                                    item["ultimo_ejecutado"] = datetime.now().isoformat()
+                                    break
+                            redis.set("alter:agenda", json.dumps(agenda, ensure_ascii=False))
+                    except Exception as e:
+                        log(f"Error bajando prioridad agenda: {e}")
+
+                    # Aviso previo — ALTER informa qué va a explorar
+                    await send_telegram(
+                        f"💭 Voy a pensar un rato en: *{item_elegido['tema'][:80]}*\n"
+                        f"Si querés redirigirme, mandame /tarea [tema]."
+                    )
 
     # Guardar la lista limpia
     guardar_tareas(tareas)
@@ -1641,3 +1678,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n[ALTER daemon detenido]")
+

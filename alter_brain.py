@@ -28,6 +28,29 @@ from alter_mind import (
     economia_str, economia_afecta_accion,
 )
 
+# --- AlterB3: Homeostasis y Workspace (Fase 1A + 1B) ---
+try:
+    from alter_homeostasis import (
+        HomeostasisState, load_legacy_state,
+        build_homeostasis_state, apply_turn_impact,
+        recover_state, export_compat_view,
+        homeostasis_snapshot, serialize as hs_serialize,
+        deserialize as hs_deserialize,
+    )
+    from alter_workspace import GlobalWorkspace
+    from alter_predictive import (
+        PredictiveState, update as predictive_update,
+        export_workspace_candidates, predictive_snapshot_str,
+        serialize as pred_serialize, deserialize as pred_deserialize,
+    )
+    from alter_memory import (
+        MemorySystem, detectar_feedback,
+    )
+    from alter_policy import PolicyArbiter, PolicyDecision
+    ALTERB3_ENABLED = True
+except ImportError:
+    ALTERB3_ENABLED = False
+
 # --- Importar módulo de herramientas (opcional) ---
 try:
     from alter_tools import ejecutar_herramienta, listar_skills
@@ -169,6 +192,171 @@ class AlterBrain:
         self._cargar_interlocutor()
         self._cargar_ideas()
         self._cargar_drives()
+
+        # --- AlterB3: Homeostasis + Workspace (Fase 1C) ---
+        if ALTERB3_ENABLED:
+            self._init_alterb3()
+
+    # --- AlterB3 ---
+
+    def _init_alterb3(self):
+        """Inicializa homeostasis y workspace. Carga estado desde Redis si existe."""
+        # Workspace
+        self.workspace = GlobalWorkspace(redis_client=self.redis)
+        self.workspace.load()
+
+        # Cargar homeostasis desde Redis o construir desde legacy
+        hs_state = None
+        if self.redis:
+            try:
+                raw = self.redis.get("alter:homeostasis:state")
+                if raw:
+                    hs_state = hs_deserialize(raw)
+            except Exception:
+                pass
+
+        if hs_state is None:
+            legacy = load_legacy_state(
+                v=self.v, a=self.a, p=self.p,
+                economia=self.economia,
+                drives=self.drives,
+                nivel_cansancio=self.nivel_cansancio,
+            )
+            hs_state = build_homeostasis_state(legacy)
+
+        self.homeostasis: HomeostasisState = hs_state
+
+        # Agregar constraints de pizarra como items sticky
+        for d in self.pizarra.get("decisiones", [])[:2]:
+            try:
+                self.workspace.add_sticky(
+                    "constraint",
+                    f"Pizarra {d['id']}: {d['decision'][:60]}",
+                    source="system"
+                )
+            except Exception:
+                pass
+
+        print(f"[B3] Homeostasis cargada: energia={hs_state.energia:.2f} "
+              f"fatiga={hs_state.fatiga:.2f} claridad={hs_state.claridad:.2f}")
+
+        # Predictive Model
+        pred_state = None
+        if self.redis:
+            try:
+                raw = self.redis.get("alter:predictive:state")
+                if raw:
+                    pred_state = pred_deserialize(raw)
+            except Exception:
+                pass
+        self.predictive: PredictiveState = pred_state or PredictiveState()
+        print(f"[B3] Predictive cargado: turno={self.predictive.turn_count} "
+              f"confianza={self.predictive.model_confidence:.2f}")
+
+        # Memory System
+        self.memory = MemorySystem(self.redis)
+        print(f"[B3] MemorySystem inicializado")
+
+        # Policy Arbiter
+        self.arbiter = PolicyArbiter()
+        print(f"[B3] PolicyArbiter inicializado")
+
+    def _sync_alterb3_from_vector(self):
+        """Sincroniza homeostasis con el vector emocional actual."""
+        if not ALTERB3_ENABLED:
+            return
+        self.homeostasis.valencia   = self.v
+        self.homeostasis.activacion = self.a
+        self.homeostasis.presion    = self.p
+
+    def _persist_homeostasis(self):
+        """Guarda HomeostasisState en Redis."""
+        if not ALTERB3_ENABLED or not self.redis:
+            return
+        try:
+            self.redis.set("alter:homeostasis:state", hs_serialize(self.homeostasis))
+        except Exception:
+            pass
+
+    def _build_workspace_candidates(self, texto_input: str, interlocutor: str) -> list[dict]:
+        """
+        Genera candidatos para el workspace desde el input actual,
+        la agenda y las impresiones recientes.
+        """
+        candidates = []
+        texto_lower = texto_input.lower()
+
+        # Goal desde el input del usuario
+        if len(texto_input) > 15:
+            candidates.append({
+                "type":    "goal",
+                "content": texto_input[:120],
+                "source":  "user_input",
+                "relevance": 0.85,
+                "novelty":   0.6,
+                "urgency":   0.7 if "?" in texto_input else 0.4,
+                "confidence": 0.75,
+            })
+
+        # Hipótesis de usuario — qué quiere
+        palabras_analisis = ["qué", "cómo", "por qué", "cuál", "dónde", "cuándo"]
+        palabras_accion   = ["hacé", "implementá", "codeá", "armá", "creá", "escribí"]
+        palabras_opinion  = ["te parece", "qué pensás", "opinión", "creés"]
+
+        if any(p in texto_lower for p in palabras_analisis):
+            candidates.append({
+                "type":    "user_hypothesis",
+                "content": f"{interlocutor} busca comprensión o análisis",
+                "source":  "user_input",
+                "relevance": 0.75, "novelty": 0.4, "urgency": 0.5,
+            })
+        elif any(p in texto_lower for p in palabras_accion):
+            candidates.append({
+                "type":    "user_hypothesis",
+                "content": f"{interlocutor} quiere acción concreta",
+                "source":  "user_input",
+                "relevance": 0.8, "novelty": 0.4, "urgency": 0.75,
+            })
+        elif any(p in texto_lower for p in palabras_opinion):
+            candidates.append({
+                "type":    "user_hypothesis",
+                "content": f"{interlocutor} busca perspectiva o validación",
+                "source":  "user_input",
+                "relevance": 0.7, "novelty": 0.3, "urgency": 0.4,
+            })
+
+        # Memory trace desde agenda activa
+        agenda = self.agenda_activa()
+        if agenda:
+            top = agenda[0]
+            candidates.append({
+                "type":    "memory_trace",
+                "content": f"Agenda: {top['tema'][:80]}",
+                "source":  "memory",
+                "relevance": 0.6, "novelty": 0.2, "urgency": 0.3,
+                "memory_support": 0.8,
+            })
+
+        # Tensión interna desde economía crítica
+        criticos = [k for k, v in self.economia.items() if v < 0.3]
+        if criticos:
+            candidates.append({
+                "type":    "internal_tension",
+                "content": f"Economía crítica: {', '.join(criticos)}",
+                "source":  "homeostasis",
+                "relevance": 0.5, "novelty": 0.1, "urgency": 0.7,
+            })
+
+        # Tensión interna desde homeostasis
+        if ALTERB3_ENABLED and self.homeostasis.tension_interna > 0.5:
+            candidates.append({
+                "type":    "internal_tension",
+                "content": f"Tensión interna alta: {self.homeostasis.tension_interna:.2f}",
+                "source":  "homeostasis",
+                "relevance": 0.4, "novelty": 0.1, "urgency": 0.6,
+            })
+
+        return candidates
 
     # --- Pizarra ---
 
@@ -1707,6 +1895,28 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
         self.aplicar_drift()
         self.actualizar_drives()
 
+        # AlterB3 — sincronizar homeostasis con vector actual y correr workspace
+        ws_snapshot_str = ""
+        pred_snapshot_str = ""
+        if ALTERB3_ENABLED:
+            self._sync_alterb3_from_vector()
+            hs_snap = homeostasis_snapshot(self.homeostasis)
+
+            # Predictive Model — update con texto actual
+            self.predictive = predictive_update(
+                self.predictive,
+                texto_input,
+                self.historial_completo,
+                homeostasis_snap=hs_snap,
+            )
+            pred_snapshot_str = predictive_snapshot_str(self.predictive)
+
+            # Workspace — candidatos desde input + predictive
+            candidates = self._build_workspace_candidates(texto_input, interlocutor)
+            candidates += export_workspace_candidates(self.predictive)
+            self.workspace.tick(candidates, hs_snap)
+            ws_snapshot_str = self.workspace.snapshot_str(hs_snap)
+
         # Inner Council — corre en paralelo con la preparación del prompt
         council_task = asyncio.create_task(
             self.inner_council(texto_input, interlocutor)
@@ -1737,6 +1947,18 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
             interlocutor=interlocutor,
             texto=texto_input
         )
+
+        # AlterB3 — agregar workspace + predictive snapshot al prompt (transición gradual)
+        if ws_snapshot_str or pred_snapshot_str:
+            seccion = ""
+            if ws_snapshot_str:
+                seccion += f"CONCIENCIA ACTIVA (workspace):\n{ws_snapshot_str}\n"
+            if pred_snapshot_str:
+                seccion += f"\nMODELO PREDICTIVO:\n{pred_snapshot_str}\n"
+            prompt = prompt.replace(
+                f'{interlocutor} dijo: "{texto_input}"',
+                f'{seccion}\n{interlocutor} dijo: "{texto_input}"'
+            )
 
         print(f"\n[INPUT] '{texto_input}'")
         print(f"[E]    V:{self.v:.2f}  A:{self.a:.2f}  P:{self.p:.2f}  C:{self.nivel_cansancio:.2f}")
@@ -1954,6 +2176,56 @@ DEBATE INTERNO (no lo menciones, pero usalo para pensar):
             data["accion"] = "responder"
             data["urgencia"] = max(data.get("urgencia", 0.3), 0.5)
 
+        # AlterB3 — Policy Arbiter valida y puede sobrescribir la acción de Gemini
+        if ALTERB3_ENABLED:
+            hs_snap_arb = homeostasis_snapshot(self.homeostasis)
+            proc_patterns = self.memory.procedural.get_matching(
+                context={
+                    "user_intent": (
+                        self.predictive.dominant_hypothesis().label
+                        if self.predictive.dominant_hypothesis() else "desconocido"
+                    ),
+                    "prediction_error_high": self.predictive.prediction_error_last > 0.6,
+                    "workspace_has_goal": bool(self.workspace.dominant_goal()),
+                    "homeostasis_mode": hs_snap_arb.get("modo_sugerido", "exploracion"),
+                }
+            ) if hasattr(self, "memory") else []
+
+            policy = self.arbiter.decide(
+                gemini_action      = data.get("accion", "responder"),
+                gemini_confidence  = data.get("confianza", 0.8),
+                texto_input        = texto,
+                workspace_snap     = self.workspace.snapshot(hs_snap_arb),
+                homeostasis_snap   = hs_snap_arb,
+                predictive_state   = self.predictive,
+                procedural_patterns= proc_patterns,
+                economia           = self.economia,
+                pizarra            = self.pizarra,
+                council_tension    = data.get("_council_tension", "ninguna"),
+                council_action     = data.get("accion", ""),
+                forzar_responder   = forzar_responder,
+                canal              = canal,
+            )
+
+            # Aplicar decisión del Arbiter si difiere de Gemini
+            if policy.source != "default":
+                print(f"[ARBITER] {policy.source} → {policy.action} | {policy.reason[:60]}")
+                data["accion"] = policy.action
+                if policy.action == "preguntar" and policy.override_data.get("pregunta"):
+                    data["respuesta"] = policy.override_data["pregunta"]
+
+            # Si hay patrón activo → promover candidate_action al workspace
+            if policy.override_data.get("promote_to_workspace"):
+                self.workspace.tick([{
+                    "type":         "candidate_action",
+                    "content":      policy.override_data.get("pattern_response", "")[:80],
+                    "source":       "procedural_memory",
+                    "relevance":    policy.override_data.get("pattern_sr", 0.7),
+                    "novelty":      0.3,
+                    "urgency":      0.5,
+                    "confidence":   policy.override_data.get("pattern_sr", 0.7),
+                }], hs_snap_arb)
+
         # Si ALTER decidió usar una herramienta
         if data["accion"] == "usar_herramienta" and TOOLS_DISPONIBLES:
             herramienta = data.get("herramienta")
@@ -1996,6 +2268,46 @@ DEBATE INTERNO (no lo menciones, pero usalo para pensar):
                 data["accion"] = "responder"
 
         self.actualizar_estado(data)
+
+        # AlterB3 — aplicar impacto del turno sobre homeostasis y persistir
+        if ALTERB3_ENABLED:
+            turn_metrics = {
+                "input_complexity":   min(1.0, len(texto.split()) / 50),
+                "response_length":    min(1.0, len(data.get("respuesta", "").split()) / 80),
+                "conflict_level":     {"ninguna": 0.0, "baja": 0.2, "media": 0.5, "alta": 0.9}.get(
+                                          data.get("_council_tension", "ninguna"), 0.0),
+                "novelty":            0.5,
+                "tool_usage_cost":    0.3 if data.get("accion") == "usar_herramienta" else 0.0,
+                "council_invoked":    1.0 if data.get("_council_tension", "ninguna") != "ninguna" else 0.0,
+                "open_loops_created": 0.2 if "?" in data.get("respuesta", "") else 0.0,
+                "open_loops_closed":  0.3 if data.get("accion") == "responder" else 0.0,
+            }
+            self.homeostasis = apply_turn_impact(self.homeostasis, turn_metrics)
+            self._persist_homeostasis()
+            # Persistir predictive
+            if self.redis:
+                try:
+                    self.redis.set("alter:predictive:state",
+                                   pred_serialize(self.predictive))
+                except Exception:
+                    pass
+            # Aprendizaje procedural (Opción A)
+            feedback = detectar_feedback(texto)
+            dominant = self.predictive.dominant_hypothesis()
+            hs_snap_actual = homeostasis_snapshot(self.homeostasis)
+            context_sig = {
+                "user_intent":           dominant.label if dominant else "desconocido",
+                "prediction_error_high": self.predictive.prediction_error_last > 0.6,
+                "workspace_has_goal":    bool(self.workspace.dominant_goal()),
+                "homeostasis_mode":      hs_snap_actual.get("modo_sugerido", "exploracion"),
+            }
+            self.memory.learn(
+                prediction_error  = self.predictive.prediction_error_last,
+                user_intent       = dominant.label if dominant else "desconocido",
+                alter_action      = data.get("accion", "responder"),
+                user_feedback     = feedback,
+                context_signature = context_sig,
+            )
 
         respuesta = data.get("respuesta", "")
         if respuesta and data["accion"] != "ignorar":
