@@ -435,6 +435,55 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO. Sin texto antes ni después.
                 )
         except Exception as e:
             log(f"[B5-CODE] Error: {e}")
+
+        # AlterB5 — Hypothesis Generator + Experiment Runner
+        try:
+            from alter_architecture_hypotheses import HypothesisGenerator
+            from alter_experiments import ExperimentRunner
+
+            hyp_generator = HypothesisGenerator()
+            existing_hyps = hyp_generator.load(redis)
+
+            # Cargar reportes disponibles
+            raw_code_obs = redis.get("alter:b5:observations")
+            raw_arch_rep = redis.get("alter:auditor:last_report")
+
+            code_rep_obj  = None
+            arch_rep_obj  = None
+
+            if raw_code_obs:
+                from alter_code_auditor import CodeAuditReport
+                code_rep_obj = CodeAuditReport.from_dict(json.loads(raw_code_obs))
+
+            if raw_arch_rep:
+                from alter_auditor import AuditReport
+                arch_rep_obj = AuditReport.from_dict(json.loads(raw_arch_rep))
+
+            from alter_selfmodel import SelfModelBuilder
+            sm_builder = SelfModelBuilder(redis_client=redis)
+            selfmodel  = sm_builder.load()
+
+            nuevas = hyp_generator.generate(
+                code_rep_obj, arch_rep_obj, selfmodel or __import__('alter_selfmodel').SelfModel(),
+                existing=existing_hyps
+            )
+            todas = existing_hyps + nuevas
+            hyp_generator.save(todas, redis)
+            log(f"[B5-HYP] {len(nuevas)} nuevas hipótesis | {len(todas)} total")
+
+            # Correr experimentos sobre hipótesis replayables
+            runner  = ExperimentRunner(redis_client=redis)
+            results = runner.run_pending(todas)
+            if results:
+                log(f"[B5-EXP] {len(results)} experimentos | "
+                    f"{sum(1 for r in results if r.mejora)} mejoras")
+                mejoras = [r for r in results if r.mejora]
+                if mejoras:
+                    msg = runner.snapshot_str(mejoras)
+                    await send_telegram(f"🧪 {msg}")
+
+        except Exception as e:
+            log(f"[B5-HYP/EXP] Error: {e}")
         try:
             from alter_metrics import MetricsSummary
             from alter_selfmodel import SelfModel, SelfModelBuilder

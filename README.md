@@ -1,6 +1,6 @@
 # ALTER
 
-**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, capacidad de auto-modificarse, y un sistema que se observa, mide, optimiza y ahora entiende su propio código.
+**ALTER** es un agente conversacional con identidad sintética, arquitectura cognitiva propia y aprendizaje continuo. No es un chatbot con personalidad — es una entidad con historia, estado interno que persiste entre sesiones, capacidad de auto-modificarse, y un sistema que se observa, mide, optimiza, entiende su propio código y experimenta variantes de sí misma.
 
 Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.com/TrogettoG) — sucesor de [Neural Ecology V2](https://github.com/TrogettoG/neural-ecology-v2).
 
@@ -18,6 +18,8 @@ Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.
 - **Aprende políticas cognitivas** — meta-learning que ajusta cómo piensa, no solo qué dice
 - **Se audita semanalmente** — architecture auditor que detecta cuellos de botella y propone mejoras
 - **Entiende su propio código** — lee el repo, mapea su implementación real y detecta gaps con la spec
+- **Formula hipótesis sobre sí misma** — genera hipótesis de mejora desde observaciones reales
+- **Experimenta sin riesgo** — prueba variantes paramétricas contra telemetría histórica sin tocar producción
 
 ---
 
@@ -26,40 +28,42 @@ Desarrollado como experimento personal por [Gianfranco Trogetto](https://github.
 ### Capa base (ALTER original)
 
 ```
-alter_persona.py         — identidad, voz, reglas de habla, pizarra
-alter_mind.py            — Inner Council, campo mental, drives, economía mental
-alter_brain.py           — orquestador: Redis, memoria, loop conversacional
-alter_daemon.py          — background: rumia, Telegram, KAIROS, DREAM, feed, tareas
-alter_tools.py           — herramientas con permisos granulares
+alter_persona.py              — identidad, voz, reglas de habla, pizarra
+alter_mind.py                 — Inner Council, campo mental, drives, economía mental
+alter_brain.py                — orquestador: Redis, memoria, loop conversacional
+alter_daemon.py               — background: rumia, Telegram, KAIROS, DREAM, feed, tareas
+alter_tools.py                — herramientas con permisos granulares
 ```
 
 ### AlterB3 — arquitectura cognitiva
 
 ```
-alter_homeostasis.py     — estado fisiológico-cognitivo unificado
-alter_workspace.py       — Global Workspace: 7 items activos que compiten por conciencia
-alter_predictive.py      — modelo predictivo de intención + error de predicción
-alter_memory.py          — memoria estratificada: episódica, semántica, procedural, identidad
-alter_policy.py          — Policy Arbiter: árbol de decisión centralizado
-alter_consolidation.py   — Offline Consolidation: actualiza parámetros durante el sueño
+alter_homeostasis.py          — estado fisiológico-cognitivo unificado
+alter_workspace.py            — Global Workspace: 7 items activos que compiten por conciencia
+alter_predictive.py           — modelo predictivo de intención + error de predicción
+alter_memory.py               — memoria estratificada: episódica, semántica, procedural, identidad
+alter_policy.py               — Policy Arbiter: árbol de decisión centralizado
+alter_consolidation.py        — Offline Consolidation: actualiza parámetros durante el sueño
 ```
 
 ### AlterB4 — sistema autooptimizante
 
 ```
-alter_metrics.py         — observabilidad estructurada: 7 módulos instrumentados
-alter_simulator.py       — Counterfactual Simulator: evalúa escenarios antes de actuar
-alter_selfmodel.py       — Self-Model: cómo rinde ALTER por módulo e intención
-alter_metalearning.py    — Meta-Learning Engine: aprende políticas cognitivas
-alter_auditor.py         — Architecture Auditor: detecta cuellos de botella semanalmente
+alter_metrics.py              — observabilidad estructurada: 7 módulos instrumentados
+alter_simulator.py            — Counterfactual Simulator: evalúa escenarios antes de actuar
+alter_selfmodel.py            — Self-Model: cómo rinde ALTER por módulo e intención
+alter_metalearning.py         — Meta-Learning Engine: aprende políticas cognitivas
+alter_auditor.py              — Architecture Auditor: detecta cuellos de botella semanalmente
 ```
 
-### AlterB5 — autoevolución controlada (Fase 1)
+### AlterB5 — autoevolución controlada
 
 ```
-alter_architecture_state.py — spec formal de los 19 módulos, pipeline y parámetros
-alter_code_map.py           — mapa read-only del repo: clases, funciones, imports
-alter_code_auditor.py       — comparador spec vs código: gaps, deuda técnica, acoplamiento
+alter_architecture_state.py   — spec formal de los 19 módulos, pipeline y parámetros
+alter_code_map.py             — mapa read-only del repo: clases, funciones, imports
+alter_code_auditor.py         — comparador spec vs código: gaps, deuda técnica, acoplamiento
+alter_architecture_hypotheses.py — generador de hipótesis desde observaciones reales
+alter_experiments.py          — Experiment Runner: prueba variantes sobre telemetría histórica
 ```
 
 Cada capa es opcional — si los archivos no están presentes, el sistema corre con la capa anterior sin errores.
@@ -89,6 +93,8 @@ Cada capa es opcional — si los archivos no están presentes, el sistema corre 
 | **Architecture State** | Spec formal consultable de los 19 módulos y su pipeline |
 | **Code Map** | Mapa read-only del repo real — clases, funciones, imports, líneas |
 | **Code Auditor** | Compara spec vs código — detecta gaps, deuda técnica y acoplamiento |
+| **Hypothesis Generator** | Formula hipótesis de mejora desde observaciones reales |
+| **Experiment Runner** | Prueba variantes paramétricas sobre telemetría sin tocar producción |
 
 ---
 
@@ -158,7 +164,7 @@ python3 alter_daemon.py
 
 ---
 
-## Flujo cognitivo por turno (AlterB4+)
+## Flujo cognitivo por turno
 
 ```
 1.  Input del usuario
@@ -174,7 +180,19 @@ python3 alter_daemon.py
 11. Adversarial Verifier     — detecta respuestas vacías
 12. Meta-Learning            — evalúa políticas cognitivas, ajusta parámetros
 13. Outcome logging          — error de predicción, feedback, aprendizaje procedural
-14. DREAM (domingo 23hs)     — consolidación + self-model + auditoría + code audit
+```
+
+## Ciclo DREAM (domingo 23hs)
+
+```
+1.  Consolidación de memoria  — episodios, ideas, grafo del mundo
+2.  Offline Consolidation     — actualiza patrones y confianza predictiva (B3)
+3.  Self-Model update         — recalibra rendimiento por módulo e intención (B4)
+4.  Meta-Learning             — evalúa políticas cognitivas activas (B4)
+5.  Architecture Auditor      — detecta cuellos de botella, genera propuestas (B4)
+6.  Code Auditor              — compara spec vs código real (B5)
+7.  Hypothesis Generator      — formula hipótesis desde observaciones (B5)
+8.  Experiment Runner         — prueba variantes replayables sobre telemetría (B5)
 ```
 
 ---
@@ -187,7 +205,7 @@ python3 alter_daemon.py
 | AlterB3 | ✅ | Workspace, homeostasis, predictive, memory layers, policy |
 | AlterB4 | ✅ | Métricas, simulator, self-model, meta-learning, auditor |
 | AlterB5 Fase 1 | ✅ | Architecture state, code map, code auditor |
-| AlterB5 Fase 2 | 🔜 | Hypothesis generator, experiment runner |
+| AlterB5 Fase 2 | ✅ | Hypothesis generator, experiment runner |
 | AlterB5 Fase 3 | 🔜 | Feature flags, controlled promotion, rollback |
 | AlterB5 Fase 4 | 🔜 | Proposals con pseudo-diffs, assisted refactor |
 
@@ -195,13 +213,18 @@ python3 alter_daemon.py
 
 ## Diseño filosófico
 
-ALTER está diseñada alrededor de la idea de **suspensión ecológica** — no optimizar un único eje sino mantener varios caminos posibles abiertos y elegir según el contexto. Esto se extiende hasta B5: el sistema puede entender y proponer cambios a su propio diseño, pero no los aplica solo. La aprobación humana es parte del diseño, no una restricción temporal.
+ALTER está diseñada alrededor de la idea de **suspensión ecológica** — no optimizar un único eje sino mantener varios caminos posibles abiertos y elegir según el contexto. Esto se extiende hasta B5:
+
+- Las hipótesis estructurales existen pero no se ejecutan solas — quedan en `no_replayable_yet`
+- Los experimentos usan telemetría real pero no tocan producción
+- La aprobación humana es parte del diseño, no una restricción temporal
+- B5 puede entender y proponer cambios a su propio diseño, pero no los aplica solo
 
 ---
 
 ## Estado actual
 
-Experimento en curso activo. Lo que funciona: identidad coherente, auto-modificación de parámetros, memoria episódica, síntesis nocturna autónoma, feed diario, workspace cognitivo, modelo predictivo, simulador contrafáctico, self-model, meta-learning, auditoría semanal, y ahora lectura y auditoría del código propio.
+Experimento en curso activo. Lo que funciona: identidad coherente, auto-modificación de parámetros, memoria episódica, síntesis nocturna autónoma, feed diario, workspace cognitivo, modelo predictivo, simulador contrafáctico, self-model, meta-learning, auditoría semanal, lectura y auditoría del código propio, generación de hipótesis estructurales, y experimentación paramétrica sobre telemetría histórica.
 
 ---
 
