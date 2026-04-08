@@ -1314,6 +1314,25 @@ async def ciclo_drives(ultimo_drives: float) -> float:
         except Exception as e:
             log(f"[B3] recover_state error: {e}")
 
+        # Economía mental — también se recupera con el tiempo
+        # Sin esto, la economía se consume pero nunca sube en modo Telegram
+        try:
+            alter = get_alter()
+            if alter:
+                from alter_mind import recuperar_economia
+                economia_antes = dict(alter.economia)
+                alter.economia = recuperar_economia(alter.economia, turnos_descanso=dt_horas * 2)
+                criticos_antes = [k for k, v in economia_antes.items() if v < 0.3]
+                criticos_despues = [k for k, v in alter.economia.items() if v < 0.3]
+                if criticos_antes != criticos_despues or criticos_antes:
+                    log(f"[ECO] Recuperada: "
+                        f"energia:{alter.economia['energia']:.2f} "
+                        f"expresion:{alter.economia['expresion']:.2f} "
+                        f"atencion:{alter.economia['atencion']:.2f} "
+                        f"tolerancia:{alter.economia['tolerancia']:.2f}")
+        except Exception as e:
+            log(f"[ECO] recover error: {e}")
+
     # AlterB5 — RollbackMonitor: chequear flags activos
     try:
         from alter_feature_flags import (
