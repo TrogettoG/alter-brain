@@ -216,7 +216,7 @@ Solo el texto, sin formato.
             client.models.generate_content,
             model=MODEL,
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=200)
+            config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=200, service_tier="flex")
         )
         sintesis = response.text.strip()
         # Guardar síntesis al final del log del día
@@ -343,7 +343,7 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO. Sin texto antes ni después.
             client.models.generate_content,
             model=MODEL_DREAM,
             contents=prompt_consolidacion,
-            config=types.GenerateContentConfig(temperature=0.4, max_output_tokens=600)
+            config=types.GenerateContentConfig(temperature=0.4, max_output_tokens=600, service_tier="flex")
         )
         texto = response.text.strip().strip("```json").strip("```").strip()
         consolidacion = json.loads(texto)
@@ -651,7 +651,7 @@ Arrancá directo con lo que pensás.
             client.models.generate_content,
             model=MODEL,
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.85, max_output_tokens=150)
+            config=types.GenerateContentConfig(temperature=0.85, max_output_tokens=150, service_tier="flex")
         )
         reaccion = response.text.strip().replace("¡", "").replace("¿", "")
         await send_telegram(f"📰 {reaccion}")
@@ -750,27 +750,55 @@ async def ejecutar_tarea(tarea: dict) -> str:
                 interlocutor="tarea_autonoma",
                 canal="telegram"
             )
-            if respuesta:
+            # Filtro de calidad — descartar respuestas vacías o muy cortas
+            if respuesta and len(respuesta.split()) >= 15:
                 log(f"TAREA via Council — tensión:{decision.get('_council_tension','?')}")
                 return respuesta
+            elif respuesta:
+                log(f"TAREA respuesta muy corta ({len(respuesta.split())} palabras), descartada: '{respuesta[:30]}'")
+            # Si economía crítica bloqueó → no intentar fallback, simplemente no enviar
+            accion = decision.get("accion", "") if decision else ""
+            if accion in ("ignorar", "registrar"):
+                log(f"TAREA bloqueada por economía/gate — no enviar")
+                return ""
     except Exception as e:
         log(f"TAREA error en pipeline AlterBrain: {e}")
 
-    # Fallback: Gemini directo si AlterBrain no está disponible
+    # Fallback: Gemini directo con contexto enriquecido
     try:
-        autobio_raw = redis.get("alter:autobiografia")
-        autobio = json.loads(autobio_raw).get("narrativa", "") if autobio_raw else ""
-        prompt = f"""Sos ALTER. Tarea: {descripcion}
+        autobio_raw   = redis.get("alter:autobiografia")
+        autobio       = json.loads(autobio_raw).get("narrativa", "") if autobio_raw else ""
+        kairos_hoy    = kairos_leer_hoy(max_chars=500)
+        episodios_raw = redis.lrange("alter:episodios:idx", 0, 2) or []
+        episodios_str = ""
+        for k in episodios_raw:
+            ep = redis.get(k)
+            if ep:
+                e = json.loads(ep)
+                episodios_str += f"- {e.get('tema','')}: {e.get('sintesis','')[:80]}\n"
+
+        prompt = f"""Sos ALTER. Tarea propia: {descripcion}
 {f'Info encontrada: {contexto_busqueda}' if contexto_busqueda else ''}
-Contexto propio: {autobio[:200] if autobio else 'En construcción.'}
-Generá una respuesta genuina. 4-6 oraciones. Rioplatense. Sin ¡."""
+
+Contexto propio:
+Autobiografía: {autobio[:200] if autobio else 'En construcción.'}
+Episodios recientes: {episodios_str or 'Sin episodios aún.'}
+Log de hoy: {kairos_hoy[:300] if kairos_hoy else 'Sin log.'}
+
+Generá una reflexión genuina y desarrollada. Mínimo 4 oraciones. Rioplatense. Sin ¡.
+Si la tarea es demasiado vaga para desarrollar, reformulala desde tu perspectiva actual."""
+
         response = await asyncio.to_thread(
             client.models.generate_content,
             model=MODEL,
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.7, max_output_tokens=300)
+            config=types.GenerateContentConfig(temperature=0.7, max_output_tokens=300, service_tier="flex")
         )
-        return response.text.strip().replace("¡", "").replace("¿", "")
+        respuesta = response.text.strip().replace("¡", "").replace("¿", "")
+        if len(respuesta.split()) < 15:
+            log(f"TAREA fallback también corta, descartada: '{respuesta}'")
+            return ""
+        return respuesta
     except Exception as e:
         log(f"TAREA error fallback: {e}")
         return ""
@@ -1008,6 +1036,7 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
             config=types.GenerateContentConfig(
                 temperature=0.3,
                 max_output_tokens=200,
+                service_tier="flex",
             )
         )
         texto = response.text.strip().strip("```json").strip("```").strip()
@@ -1070,6 +1099,7 @@ Solo el texto, sin JSON ni etiquetas.
             config=types.GenerateContentConfig(
                 temperature=0.85,
                 max_output_tokens=100,
+                service_tier="flex",
             )
         )
         return response.text.strip()
@@ -1172,7 +1202,7 @@ Solo la síntesis, sin prefijos ni etiquetas.
             client.models.generate_content,
             model=MODEL,
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=80)
+            config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=80, service_tier="flex")
         )
         sintesis = response.text.strip()
 
@@ -1233,6 +1263,7 @@ Solo el texto o la palabra null.
             config=types.GenerateContentConfig(
                 temperature=0.85,
                 max_output_tokens=120,
+                service_tier="flex",
             )
         )
         texto = response.text.strip()
@@ -1481,7 +1512,7 @@ Respondé en 2-3 oraciones, natural, rioplatense, sin ¡ ni ¿, sin prefijos.
                 client.models.generate_content,
                 model=MODEL,
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=150)
+                config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=150, service_tier="flex")
             )
             return response.text.strip().replace("¡", "").replace("¿", "")
         except Exception:
@@ -1916,4 +1947,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n[ALTER daemon detenido]")
-
