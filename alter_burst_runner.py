@@ -272,6 +272,18 @@ async def run_burst(
     except Exception as e:
         print(f"[BURST] Warning: no se pudo resetear economía: {e}")
 
+    # Reset homeostasis al inicio del burst — idem, no heredar estado colapsado
+    try:
+        from alter_homeostasis import HomeostasisState, serialize as hs_serialize
+        hs_fresca = HomeostasisState()  # valores por defecto: energia=1, fatiga=0, claridad=1
+        if redis_client:
+            redis_client.set("alter:homeostasis:state", hs_serialize(hs_fresca))
+        if hasattr(alter, "homeostasis"):
+            alter.homeostasis = hs_fresca
+        print(f"[BURST] Homeostasis reseteada a valores base")
+    except Exception as e:
+        print(f"[BURST] Warning: no se pudo resetear homeostasis: {e}")
+
     # Capturar métricas antes
     metricas_antes = capturar_metricas(alter, redis_client)
     print(f"[BURST] Estado inicial: V={metricas_antes['vector'][0]} "
@@ -345,17 +357,20 @@ async def run_burst(
 
     duracion = time.time() - t_inicio
 
-    # Restaurar economía real en Redis — el burst usó valores sintéticos
-    # La economía real del daemon no debe verse afectada por el burst
+    # Restaurar economía y homeostasis reales en Redis post-burst
     try:
         from alter_mind import recuperar_economia
+        from alter_homeostasis import HomeostasisState, serialize as hs_serialize
         eco_restaurada = recuperar_economia(dict(ECONOMIA_DEFAULT), turnos_descanso=2.0)
         if redis_client:
             redis_client.set("alter:economia",
                 json.dumps(eco_restaurada, ensure_ascii=False))
-        print(f"[BURST] Economía real restaurada post-burst")
+            # Restaurar homeostasis a valores parcialmente recuperados (no perfectos)
+            hs_restaurada = HomeostasisState(energia=0.8, fatiga=0.1, claridad=0.8)
+            redis_client.set("alter:homeostasis:state", hs_serialize(hs_restaurada))
+        print(f"[BURST] Economía y homeostasis restauradas post-burst")
     except Exception as e:
-        print(f"[BURST] Warning: no se pudo restaurar economía: {e}")
+        print(f"[BURST] Warning: no se pudo restaurar estado: {e}")
 
     # Capturar métricas después
     metricas_despues = capturar_metricas(alter, redis_client)
