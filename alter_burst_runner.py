@@ -260,6 +260,18 @@ async def run_burst(
     alter = AlterBrain(interlocutor_id="gian_synthetic")
     redis_client = alter.redis
 
+    # Reset economía al inicio del burst — no heredar estado colapsado de sesión anterior
+    # El burst es un entorno sintético controlado, no debe partir de economía agotada
+    try:
+        from alter_mind import ECONOMIA_DEFAULT, recuperar_economia
+        alter.economia = dict(ECONOMIA_DEFAULT)
+        if redis_client:
+            redis_client.set("alter:economia",
+                json.dumps(alter.economia, ensure_ascii=False))
+        print(f"[BURST] Economía reseteada a valores base")
+    except Exception as e:
+        print(f"[BURST] Warning: no se pudo resetear economía: {e}")
+
     # Capturar métricas antes
     metricas_antes = capturar_metricas(alter, redis_client)
     print(f"[BURST] Estado inicial: V={metricas_antes['vector'][0]} "
@@ -332,6 +344,18 @@ async def run_burst(
         await asyncio.sleep(0.5)
 
     duracion = time.time() - t_inicio
+
+    # Restaurar economía real en Redis — el burst usó valores sintéticos
+    # La economía real del daemon no debe verse afectada por el burst
+    try:
+        from alter_mind import recuperar_economia
+        eco_restaurada = recuperar_economia(dict(ECONOMIA_DEFAULT), turnos_descanso=2.0)
+        if redis_client:
+            redis_client.set("alter:economia",
+                json.dumps(eco_restaurada, ensure_ascii=False))
+        print(f"[BURST] Economía real restaurada post-burst")
+    except Exception as e:
+        print(f"[BURST] Warning: no se pudo restaurar economía: {e}")
 
     # Capturar métricas después
     metricas_despues = capturar_metricas(alter, redis_client)
