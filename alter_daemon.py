@@ -1793,7 +1793,7 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
                     resumen = pm.summary_str()
                     kpi = pm.kpi_report()
                     msg = (f"{resumen}\n\n"
-                           f"KPIs paper:\n"
+                           f"KPIs:\n"
                            f"  EEP totales: {kpi['eep_count']}\n"
                            f"  Presión media: {kpi['pressure_medio_historico']:.2f}\n"
                            f"  Presión máx: {kpi['pressure_max_historico']:.2f}\n"

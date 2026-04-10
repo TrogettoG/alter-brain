@@ -99,14 +99,9 @@ class ArchitectureState:
 # SPEC ACTUAL DE ALTER (fuente de verdad)
 # ============================================================
 
-def build_current_spec() -> ArchitectureState:
-    """
-    Construye la spec formal de la arquitectura actual de ALTER.
-    Actualizar cuando se agreguen o modifiquen módulos.
-    """
-    modules = [
-
-        # ── CAPA BASE ────────────────────────────────────────
+def _modules_base() -> list:
+    """Módulos de la capa base: persona, mind, brain, daemon, tools."""
+    return [
         ModuleSpec(
             nombre="persona", archivo="alter_persona.py",
             clase_principal="(funciones)",
@@ -119,7 +114,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="base",
             redis_keys=["alter:config:pizarra"],
         ),
-
         ModuleSpec(
             nombre="mind", archivo="alter_mind.py",
             clase_principal="(funciones)",
@@ -134,7 +128,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="base",
             redis_keys=[],
         ),
-
         ModuleSpec(
             nombre="brain", archivo="alter_brain.py",
             clase_principal="AlterBrain",
@@ -152,11 +145,10 @@ def build_current_spec() -> ArchitectureState:
                         "alter:agenda", "alter:autobiografia", "alter:reputacion",
                         "alter:consecuencias"],
         ),
-
         ModuleSpec(
             nombre="daemon", archivo="alter_daemon.py",
             clase_principal="(funciones async)",
-            descripcion="Background: rumia, Telegram, KAIROS, DREAM, feed, tareas.",
+            descripcion="Background: rumia, Telegram, KAIROS, DREAM, feed, tareas, burst.",
             inputs=["brain", "redis"], outputs=["telegram", "redis"],
             parametros=[
                 ParametroSpec("INTERVALO_DRIVES_SEG", 1800, "int",
@@ -171,13 +163,14 @@ def build_current_spec() -> ArchitectureState:
                               descripcion="Hora de síntesis nocturna KAIROS"),
                 ParametroSpec("HORA_DREAM", 23, "int",
                               descripcion="Hora de consolidación DREAM"),
+                ParametroSpec("HORA_BURST", 14, "int",
+                              descripcion="Hora del burst diario de calibración"),
             ],
             estado="activo", capa="base",
             redis_keys=["alter:daemon:ultimo_inicio", "alter:drives",
                         "alter:kairos:sintesis_hoy", "alter:dream:resumen_semana",
                         "alter:tareas"],
         ),
-
         ModuleSpec(
             nombre="tools", archivo="alter_tools.py",
             clase_principal="(funciones)",
@@ -190,8 +183,12 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="base",
             redis_keys=["alter:tool_log", "alter:skills"],
         ),
+    ]
 
-        # ── CAPA B3 ──────────────────────────────────────────
+
+def _modules_b3() -> list:
+    """Módulos de la capa B3: homeostasis, workspace, predictive, memory, policy, consolidation."""
+    return [
         ModuleSpec(
             nombre="homeostasis", archivo="alter_homeostasis.py",
             clase_principal="HomeostasisState",
@@ -204,7 +201,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b3",
             redis_keys=["alter:homeostasis:state"],
         ),
-
         ModuleSpec(
             nombre="workspace", archivo="alter_workspace.py",
             clase_principal="GlobalWorkspace",
@@ -224,7 +220,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b3",
             redis_keys=["alter:workspace:state", "alter:workspace:log"],
         ),
-
         ModuleSpec(
             nombre="predictive", archivo="alter_predictive.py",
             clase_principal="PredictiveState",
@@ -234,7 +229,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b3",
             redis_keys=["alter:predictive:state", "alter:predictive:errors"],
         ),
-
         ModuleSpec(
             nombre="memory", archivo="alter_memory.py",
             clase_principal="MemorySystem",
@@ -251,7 +245,6 @@ def build_current_spec() -> ArchitectureState:
                         "alter:mundo:aristas", "alter:ideas",
                         "alter:episodios:idx", "alter:imp:idx"],
         ),
-
         ModuleSpec(
             nombre="policy", archivo="alter_policy.py",
             clase_principal="PolicyArbiter",
@@ -269,7 +262,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b3",
             redis_keys=[],
         ),
-
         ModuleSpec(
             nombre="consolidation", archivo="alter_consolidation.py",
             clase_principal="OfflineConsolidation",
@@ -284,8 +276,12 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b3",
             redis_keys=[],
         ),
+    ]
 
-        # ── CAPA B4 ──────────────────────────────────────────
+
+def _modules_b4() -> list:
+    """Módulos de la capa B4: metrics, simulator, selfmodel, metalearning, auditor."""
+    return [
         ModuleSpec(
             nombre="metrics", archivo="alter_metrics.py",
             clase_principal="MetricsCollector",
@@ -302,7 +298,6 @@ def build_current_spec() -> ArchitectureState:
                         "alter:metrics:workspace:current",
                         "alter:metrics:predictive:current"],
         ),
-
         ModuleSpec(
             nombre="simulator", archivo="alter_simulator.py",
             clase_principal="CounterfactualSimulator",
@@ -320,7 +315,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b4",
             redis_keys=[],
         ),
-
         ModuleSpec(
             nombre="selfmodel", archivo="alter_selfmodel.py",
             clase_principal="SelfModel",
@@ -333,7 +327,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b4",
             redis_keys=["alter:selfmodel:state", "alter:selfmodel:updated"],
         ),
-
         ModuleSpec(
             nombre="metalearning", archivo="alter_metalearning.py",
             clase_principal="MetaLearningEngine",
@@ -343,7 +336,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b4",
             redis_keys=["alter:metalearning:policies", "alter:metalearning:log"],
         ),
-
         ModuleSpec(
             nombre="auditor", archivo="alter_auditor.py",
             clase_principal="ArchitectureAuditor",
@@ -359,8 +351,12 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b4",
             redis_keys=["alter:auditor:last_report", "alter:auditor:proposals"],
         ),
+    ]
 
-        # ── CAPA B5 ──────────────────────────────────────────
+
+def _modules_b5() -> list:
+    """Módulos de la capa B5: architecture_state, code_map, code_auditor."""
+    return [
         ModuleSpec(
             nombre="architecture_state", archivo="alter_architecture_state.py",
             clase_principal="ArchitectureState",
@@ -370,7 +366,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b5",
             redis_keys=["alter:b5:architecture_state"],
         ),
-
         ModuleSpec(
             nombre="code_map", archivo="alter_code_map.py",
             clase_principal="CodeMapper",
@@ -380,7 +375,6 @@ def build_current_spec() -> ArchitectureState:
             estado="activo", capa="b5",
             redis_keys=["alter:b5:code_map"],
         ),
-
         ModuleSpec(
             nombre="code_auditor", archivo="alter_code_auditor.py",
             clase_principal="CodeAuditor",
@@ -398,6 +392,56 @@ def build_current_spec() -> ArchitectureState:
         ),
     ]
 
+
+def _modules_experimental() -> list:
+    """Módulos experimentales: pressure monitor, burst runner."""
+    return [
+        ModuleSpec(
+            nombre="pressure", archivo="alter_pressure.py",
+            clase_principal="PressureMonitor",
+            descripcion="Detección de presión acumulada pre-evasión. Análogo a Emotion Probes de Mythos.",
+            inputs=["brain"], outputs=["kairos", "paper_kpis"],
+            parametros=[
+                ParametroSpec("UMBRAL_EEP", 0.55, "float", [0.3, 0.8],
+                              descripcion="Score mínimo para registrar evento de evasión"),
+                ParametroSpec("VENTANA_TRAZAS", 8, "int",
+                              descripcion="Turnos para calcular presión acumulada"),
+            ],
+            estado="activo", capa="experimental",
+            redis_keys=["alter:pressure:state", "alter:pressure:events",
+                        "alter:pressure:score_serie"],
+        ),
+        ModuleSpec(
+            nombre="burst_runner", archivo="alter_burst_runner.py",
+            clase_principal="(funciones async)",
+            descripcion="Aceleración sintética: replay histórico, synthetic presets, Gian sintético con ruido.",
+            inputs=["brain", "redis"], outputs=["redis", "telegram"],
+            parametros=[
+                ParametroSpec("RONDAS_DIARIAS", 3, "int",
+                              descripcion="Rondas automáticas del burst diario"),
+                ParametroSpec("NOISE_RATIO", 0.20, "float", [0.0, 0.5],
+                              descripcion="Fracción de ruido humano en modo gian"),
+            ],
+            estado="activo", capa="experimental",
+            redis_keys=["alter:burst:history"],
+        ),
+    ]
+
+
+def build_current_spec() -> ArchitectureState:
+    """
+    Construye la spec formal de la arquitectura actual de ALTER.
+    Actualizar cuando se agreguen o modifiquen módulos.
+    Delega la definición de módulos a funciones privadas por capa.
+    """
+    modules = (
+        _modules_base() +
+        _modules_b3() +
+        _modules_b4() +
+        _modules_b5() +
+        _modules_experimental()
+    )
+
     pipeline = [
         "homeostasis.tick",
         "predictive.pre",
@@ -414,17 +458,19 @@ def build_current_spec() -> ArchitectureState:
     ]
 
     flags = {
-        "ALTERB3_ENABLED": True,
-        "council_on_demand": False,   # futuro: Council solo cuando hay tensión
-        "workspace_as_sole_context": False,  # futuro: workspace reemplaza historial
-        "procedural_learning_active": True,
+        "ALTERB3_ENABLED":              True,
+        "council_on_demand":            False,
+        "workspace_as_sole_context":    False,
+        "procedural_learning_active":   True,
+        "pressure_monitor_active":      True,
+        "burst_runner_active":          True,
     }
 
     dependencias_criticas = ["persona", "mind", "brain", "daemon"]
 
     return ArchitectureState(
-        version      = "B5.1",
-        last_updated = "2026-04-06",
+        version      = "B5.2",
+        last_updated = "2026-04-10",
         modules      = modules,
         pipeline     = pipeline,
         flags        = flags,
