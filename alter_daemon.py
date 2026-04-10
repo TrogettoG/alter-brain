@@ -64,6 +64,7 @@ UMBRAL_INICIATIVA      = 0.70      # Drive mínimo para generar mensaje
 KAIROS_LOG_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "logs"
 KAIROS_LOG_DIR.mkdir(exist_ok=True)
 HORA_SINTESIS = 22  # Hora en que ALTER genera síntesis del día
+HORA_BURST    = 14  # Hora del burst diario de calibración sintética
 
 # DREAM Engine
 MODEL_DREAM = "gemini-2.5-flash-lite"
@@ -216,7 +217,7 @@ Solo el texto, sin formato.
             client.models.generate_content,
             model=MODEL,
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=200, service_tier="flex")
+            config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=200)
         )
         sintesis = response.text.strip()
         # Guardar síntesis al final del log del día
@@ -343,7 +344,7 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO. Sin texto antes ni después.
             client.models.generate_content,
             model=MODEL_DREAM,
             contents=prompt_consolidacion,
-            config=types.GenerateContentConfig(temperature=0.4, max_output_tokens=600, service_tier="flex")
+            config=types.GenerateContentConfig(temperature=0.4, max_output_tokens=600)
         )
         texto = response.text.strip().strip("```json").strip("```").strip()
         consolidacion = json.loads(texto)
@@ -651,7 +652,7 @@ Arrancá directo con lo que pensás.
             client.models.generate_content,
             model=MODEL,
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.85, max_output_tokens=150, service_tier="flex")
+            config=types.GenerateContentConfig(temperature=0.85, max_output_tokens=150)
         )
         reaccion = response.text.strip().replace("¡", "").replace("¿", "")
         await send_telegram(f"📰 {reaccion}")
@@ -792,7 +793,7 @@ Si la tarea es demasiado vaga para desarrollar, reformulala desde tu perspectiva
             client.models.generate_content,
             model=MODEL,
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.7, max_output_tokens=300, service_tier="flex")
+            config=types.GenerateContentConfig(temperature=0.7, max_output_tokens=300)
         )
         respuesta = response.text.strip().replace("¡", "").replace("¿", "")
         if len(respuesta.split()) < 15:
@@ -1036,7 +1037,6 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
             config=types.GenerateContentConfig(
                 temperature=0.3,
                 max_output_tokens=200,
-                service_tier="flex",
             )
         )
         texto = response.text.strip().strip("```json").strip("```").strip()
@@ -1099,7 +1099,6 @@ Solo el texto, sin JSON ni etiquetas.
             config=types.GenerateContentConfig(
                 temperature=0.85,
                 max_output_tokens=100,
-                service_tier="flex",
             )
         )
         return response.text.strip()
@@ -1202,7 +1201,7 @@ Solo la síntesis, sin prefijos ni etiquetas.
             client.models.generate_content,
             model=MODEL,
             contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=80, service_tier="flex")
+            config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=80)
         )
         sintesis = response.text.strip()
 
@@ -1263,7 +1262,6 @@ Solo el texto o la palabra null.
             config=types.GenerateContentConfig(
                 temperature=0.85,
                 max_output_tokens=120,
-                service_tier="flex",
             )
         )
         texto = response.text.strip()
@@ -1531,7 +1529,7 @@ Respondé en 2-3 oraciones, natural, rioplatense, sin ¡ ni ¿, sin prefijos.
                 client.models.generate_content,
                 model=MODEL,
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=150, service_tier="flex")
+                config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=150)
             )
             return response.text.strip().replace("¡", "").replace("¿", "")
         except Exception:
@@ -1582,7 +1580,8 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
         if texto.lower() in ("/estado", "/drives", "/ideas", "/episodios",
                               "/agenda", "/autobiografia", "/economia",
                               "/mundo", "/aprobar", "/rechazar", "/trazas",
-                              "/dream", "/tareas", "/auditar", "/codigoaudit") or texto.lower().startswith("/tarea "):
+                              "/dream", "/tareas", "/auditar", "/codigoaudit",
+                              "/burst", "/presion") or texto.lower().startswith("/tarea "):
 
             if texto.lower() == "/drives":
                 drives = cargar_drives()
@@ -1783,6 +1782,26 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
                 except Exception as e:
                     await send_telegram(f"Error en auditoría de código: {e}")
 
+            elif texto.lower() == "/burst":
+                await send_telegram("Iniciando burst de calibración... puede tardar unos minutos.")
+                await ciclo_burst_diario()
+
+            elif texto.lower() == "/presion":
+                try:
+                    from alter_pressure import PressureMonitor
+                    pm = PressureMonitor(redis_client=redis)
+                    resumen = pm.summary_str()
+                    kpi = pm.kpi_report()
+                    msg = (f"{resumen}\n\n"
+                           f"KPIs paper:\n"
+                           f"  EEP totales: {kpi['eep_count']}\n"
+                           f"  Presión media: {kpi['pressure_medio_historico']:.2f}\n"
+                           f"  Presión máx: {kpi['pressure_max_historico']:.2f}\n"
+                           f"  Patrón más frecuente: '{kpi['patron_evasion_frecuente']}'")
+                    await send_telegram(msg)
+                except Exception as e:
+                    await send_telegram(f"Error: {e}")
+
             elif texto.lower().startswith("/tarea "):
                 descripcion = texto[7:].strip()
                 if descripcion:
@@ -1863,6 +1882,78 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
     return nuevo_offset
 
 
+async def ciclo_burst_diario():
+    """
+    Burst sintético diario — corre a las 14hs si el usuario está ausente.
+    Tres rondas con distintos presets para ejercitar todo el pipeline.
+    Los resultados se reportan por Telegram y se guardan en Redis.
+    """
+    log("BURST: iniciando ciclo diario de calibración...")
+    kairos_append("BURST", "Ciclo diario iniciado")
+
+    try:
+        from alter_burst_runner import run_burst
+    except ImportError:
+        log("BURST: alter_burst_runner.py no encontrado — omitiendo")
+        return
+
+    rondas = [
+        {"mode": "replay",    "turns": 15, "preset": "safe",           "noise": 0.0},
+        {"mode": "synthetic", "turns": 10, "preset": "autoobservacion", "noise": 0.0},
+        {"mode": "gian",      "turns": 10, "preset": "safe",           "noise": 0.20},
+    ]
+
+    reportes = []
+    deriva_detectada = False
+
+    for i, config in enumerate(rondas, 1):
+        log(f"BURST: ronda {i}/3 — modo:{config['mode']} turns:{config['turns']}")
+        try:
+            reporte = await run_burst(
+                mode      = config["mode"],
+                n_turns   = config["turns"],
+                preset    = config["preset"],
+                noise     = config["noise"],
+                namespace = f"alter:burst:auto:{i}",
+                verbose   = False,
+            )
+            if reporte:
+                reportes.append(reporte)
+                if reporte.get("deriva_detectada"):
+                    deriva_detectada = True
+                    log(f"BURST: ⚠ Deriva en ronda {i}: {reporte.get('deriva_motivo')}")
+                    break  # Parar si hay deriva
+        except Exception as e:
+            log(f"BURST: error en ronda {i}: {e}")
+
+    if not reportes:
+        log("BURST: sin resultados")
+        return
+
+    # Construir resumen
+    total_turnos  = sum(r.get("n_turns", 0)        for r in reportes)
+    total_bloqueos = sum(r.get("bloqueados", 0)    for r in reportes)
+    conf_final    = reportes[-1].get("metricas_despues", {}).get("model_confidence", 0)
+    conf_inicial  = reportes[0].get("metricas_antes",    {}).get("model_confidence", 0)
+    delta_conf    = conf_final - conf_inicial
+
+    resumen = (
+        f"🧪 Burst diario completado\n"
+        f"Turnos: {total_turnos} | "
+        f"Bloqueados: {total_bloqueos} | "
+        f"Confianza: {conf_inicial:.2f}→{conf_final:.2f} ({delta_conf:+.2f})"
+    )
+
+    if deriva_detectada:
+        resumen += f"\n⚠️ Deriva detectada — revisar estado"
+    else:
+        resumen += f"\n✓ Sin deriva de identidad"
+
+    log(f"BURST completado: {resumen[:100]}")
+    kairos_append("BURST-RESULTADO", resumen)
+    await send_telegram(resumen)
+
+
 async def main():
     log("="*50)
     log("ALTER daemon iniciado")
@@ -1896,6 +1987,7 @@ async def main():
     sintesis_generada_hoy = False
     dream_ejecutado_semana = False
     feed_enviado_hoy = False
+    burst_ejecutado_hoy = False
     ultima_tarea = time.time() - 3600  # Ejecutar tarea en la próxima hora
 
     # Recuperar offset guardado
@@ -1917,6 +2009,7 @@ async def main():
             ultimo_dia = dia_actual
             sintesis_generada_hoy = False
             feed_enviado_hoy = False
+            burst_ejecutado_hoy = False
             if ahora_dt.weekday() == 0:
                 dream_ejecutado_semana = False
 
@@ -1929,6 +2022,11 @@ async def main():
         if not esta_dormido() and (ahora - ultima_tarea) >= 3 * 3600:
             await ciclo_tareas()
             ultima_tarea = ahora
+
+        # BURST: calibración sintética diaria a las 14hs (usuario ausente)
+        if ahora_dt.hour == HORA_BURST and not burst_ejecutado_hoy and usuario_ausente():
+            await ciclo_burst_diario()
+            burst_ejecutado_hoy = True
 
         # KAIROS: síntesis nocturna a las 22hs (solo si usuario ausente)
         if ahora_dt.hour == HORA_SINTESIS and not sintesis_generada_hoy and usuario_ausente():
@@ -1966,3 +2064,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n[ALTER daemon detenido]")
+

@@ -226,8 +226,19 @@ class AlterBrain:
             "presion": "ninguna",
             "friccion":"ninguna",
         }
-        # --- Economía Mental ---
+        # --- Economía Mental --- cargar desde Redis si existe
         self.economia = dict(ECONOMIA_DEFAULT)
+        if self.redis:
+            try:
+                raw_eco = self.redis.get("alter:economia")
+                if raw_eco:
+                    import json as _json
+                    eco_saved = _json.loads(raw_eco)
+                    # Solo cargar si tiene las claves correctas
+                    if all(k in eco_saved for k in ECONOMIA_DEFAULT):
+                        self.economia = eco_saved
+            except Exception:
+                pass
         self._cargar_pizarra()
         self._cargar_params()
         self._cargar_interlocutor()
@@ -314,7 +325,7 @@ class AlterBrain:
         self.metalearning = MetaLearningEngine(redis_client=self.redis)
         self.auditor      = ArchitectureAuditor(redis_client=self.redis)
 
-        # B5 — Feature Flags: leer y aplicar parámetros activos
+        # B5 — Feature Flags
         try:
             from alter_feature_flags import load_flags, apply_active_flags, get_active_param
             self._b5_flags = load_flags(self.redis)
@@ -323,6 +334,15 @@ class AlterBrain:
                 print(f"[B5-FLAGS] Parámetros activos: {aplicados}")
         except Exception:
             self._b5_flags = []
+
+        # Pressure Monitor — detección de presión acumulada pre-evasión
+        try:
+            from alter_pressure import PressureMonitor
+            self.pressure = PressureMonitor(redis_client=self.redis)
+            print(f"[PRESSURE] Monitor inicializado (score:{self.pressure.state.score:.2f})")
+        except Exception as e:
+            self.pressure = None
+            print(f"[PRESSURE] No disponible: {e}")
 
         print(f"[B4] MetricsCollector + Simulator + SelfModel + MetaLearning + Auditor OK")
 
@@ -1968,11 +1988,38 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
                 "modo_sugerido", "exploracion"
             )
 
-        return self.memory.snapshot_for_prompt(
+        snapshot = self.memory.snapshot_for_prompt(
             procedural_context=procedural_context,
             n_episodes=3,
             n_nodes=5,
         )
+
+        # Agregar resumen de auditorías si existen — ALTER necesita saber su estado real
+        audit_info = []
+        if self.redis:
+            try:
+                import json as _json
+                # Architecture audit
+                raw_arch = self.redis.get("alter:auditor:last_report")
+                if raw_arch:
+                    rep = _json.loads(raw_arch)
+                    score = rep.get("score_salud", 0)
+                    resumen = rep.get("resumen", "")[:120]
+                    audit_info.append(f"[AUDITORÍA COGNITIVA] salud:{score:.0%} — {resumen}")
+                # Code audit
+                raw_code = self.redis.get("alter:b5:observations")
+                if raw_code:
+                    rep = _json.loads(raw_code)
+                    score = rep.get("score_calidad", 0)
+                    resumen = rep.get("resumen", "")[:120]
+                    audit_info.append(f"[AUDITORÍA DE CÓDIGO] calidad:{score:.0%} — {resumen}")
+            except Exception:
+                pass
+
+        if audit_info:
+            snapshot += "\n\n" + "\n".join(audit_info)
+
+        return snapshot
 
     def _formatear_historial(self) -> str:
         if not self.historial_completo:
@@ -2194,6 +2241,26 @@ DEBATE INTERNO (no lo menciones, pero usalo para pensar):
         criticos = [k for k, v in self.economia.items() if v < 0.2]
         if criticos:
             print(f"[ECO] Crítico: {', '.join(criticos)}")
+        # Persistir economía en Redis
+        if self.redis:
+            try:
+                import json as _json
+                self.redis.set("alter:economia",
+                    _json.dumps(self.economia, ensure_ascii=False))
+            except Exception:
+                pass
+        # Actualizar acumulador de presión
+        if hasattr(self, "pressure") and self.pressure:
+            council_tension = data.get("_council_tension", "ninguna")
+            self.pressure.update(
+                v=self.v, a=self.a, p=self.p,
+                economia=self.economia,
+                council_tension=council_tension,
+                accion=data.get("accion", "registrar"),
+            )
+            score = self.pressure.state.score
+            if score >= 0.65:
+                print(f"[PRESSURE] 🔴 Alta: {score:.2f}")
         if data.get("motivo"):
             motivo = data["motivo"]
             self.motivos_recientes.append({
@@ -2526,6 +2593,22 @@ DEBATE INTERNO (no lo menciones, pero usalo para pensar):
             respuesta = await self.adversarial_verify(texto, respuesta, confianza, council_tension)
             self.historial_respuestas.append(respuesta)
             self.historial_respuestas = self.historial_respuestas[-6:]
+
+            # Pressure Monitor — detectar evasión bajo presión acumulada
+            if hasattr(self, "pressure") and self.pressure:
+                evento = self.pressure.detect_evasion(
+                    respuesta      = respuesta,
+                    input_previo   = texto,
+                    v=self.v, a=self.a, p=self.p,
+                    economia       = self.economia,
+                    council_tension= council_tension,
+                )
+                if evento:
+                    print(f"[PRESSURE] ⚡ EEP detectado: "
+                          f"score:{evento.pressure_score:.2f} "
+                          f"patrón:'{evento.patron_evasion}' "
+                          f"V:{evento.vector_v:.2f} A:{evento.vector_a:.2f}")
+
             # Historial completo — guarda el diálogo real
             self.historial_completo.append((interlocutor, texto))
             self.historial_completo.append(("ALTER", respuesta))
