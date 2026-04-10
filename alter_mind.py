@@ -203,10 +203,10 @@ ECONOMIA_DEFAULT = {
 }
 
 ECONOMIA_RECUPERACION = {
-    "atencion":   0.05,  # por turno sin input intenso
-    "energia":    0.08,
-    "tolerancia": 0.06,
-    "expresion":  0.04,
+    "atencion":   0.08,  # por turno sin input intenso
+    "energia":    0.10,
+    "tolerancia": 0.08,
+    "expresion":  0.06,
 }
 
 def consumir_economia(economia: dict, accion: str,
@@ -215,31 +215,43 @@ def consumir_economia(economia: dict, accion: str,
                        campo: dict) -> dict:
     """
     Consume recursos internos según la complejidad del turno.
+
+    Filosofía de calibración:
+        - Hablar es barato — ALTER puede tener 50+ conversaciones sin agotarse
+        - Usar herramientas cuesta más — requiere procesamiento extra
+        - El agotamiento viene del conflicto sostenido y la fricción, no del habla
+
     Pure function — retorna nueva economía.
     """
     economia = dict(economia)
 
-    # Costo base por acción
+    # Costo base por acción — conversación muy barata, herramientas más costosas
     costo_accion = {
-        "ignorar":          {"atencion": 0.01, "energia": 0.0,  "tolerancia": 0.0,  "expresion": 0.0},
-        "registrar":        {"atencion": 0.03, "energia": 0.02, "tolerancia": 0.0,  "expresion": 0.0},
-        "responder":        {"atencion": 0.05, "energia": 0.06, "tolerancia": 0.02, "expresion": 0.08},
-        "interrumpir":      {"atencion": 0.08, "energia": 0.05, "tolerancia": 0.10, "expresion": 0.05},
-        "usar_herramienta": {"atencion": 0.10, "energia": 0.08, "tolerancia": 0.01, "expresion": 0.03},
-    }.get(accion, {"atencion": 0.03, "energia": 0.03, "tolerancia": 0.01, "expresion": 0.02})
+        "ignorar":          {"atencion": 0.001, "energia": 0.0,   "tolerancia": 0.0,   "expresion": 0.0},
+        "registrar":        {"atencion": 0.003, "energia": 0.002, "tolerancia": 0.0,   "expresion": 0.0},
+        "responder":        {"atencion": 0.004, "energia": 0.004, "tolerancia": 0.002, "expresion": 0.003},
+        "preguntar":        {"atencion": 0.003, "energia": 0.003, "tolerancia": 0.001, "expresion": 0.002},
+        "reformular":       {"atencion": 0.005, "energia": 0.004, "tolerancia": 0.003, "expresion": 0.003},
+        "interrumpir":      {"atencion": 0.010, "energia": 0.008, "tolerancia": 0.015, "expresion": 0.004},
+        "usar_herramienta": {"atencion": 0.060, "energia": 0.050, "tolerancia": 0.005, "expresion": 0.020},
+        "diferir":          {"atencion": 0.002, "energia": 0.002, "tolerancia": 0.002, "expresion": 0.001},
+    }.get(accion, {"atencion": 0.003, "energia": 0.003, "tolerancia": 0.001, "expresion": 0.002})
 
-    # Multiplicador por tensión del Council
-    mult_tension = {"ninguna": 1.0, "baja": 1.1, "media": 1.4, "alta": 1.8}.get(
+    # Multiplicador por tensión del Council — reducido para no amplificar demasiado
+    mult_tension = {"ninguna": 1.0, "baja": 1.1, "media": 1.3, "alta": 1.6}.get(
         council_tension, 1.0
     )
 
-    # Multiplicador por baja confianza — más esfuerzo para generar
-    mult_confianza = 1.0 + (1.0 - confianza) * 0.5
+    # Multiplicador por baja confianza — reducido
+    mult_confianza = 1.0 + (1.0 - confianza) * 0.3
 
-    # Multiplicador por fricción interna
+    # Multiplicador por fricción interna — solo fricción real cuesta caro
     mult_friccion = {
-        "ninguna": 1.0, "duda": 1.3, "contradiccion": 1.5,
-        "saturacion": 1.4, "fatiga": 1.6
+        "ninguna":      1.0,
+        "duda":         1.2,
+        "contradiccion":1.4,
+        "saturacion":   1.3,
+        "fatiga":       1.5,
     }.get(campo.get("friccion", "ninguna"), 1.0)
 
     mult_total = mult_tension * mult_confianza * mult_friccion
