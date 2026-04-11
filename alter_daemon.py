@@ -716,16 +716,26 @@ async def ejecutar_tarea(tarea: dict) -> str:
     descripcion = tarea.get("descripcion", "")
     log(f"TAREA ejecutando: '{descripcion[:60]}'")
 
+    # Limpiar prefijos que contaminan el tono — solo el tema limpio al pipeline
+    tema_limpio = descripcion
+    for prefijo in ["Reflexionar sobre: ", "Reflexioná sobre: ", "Pensar en: "]:
+        if tema_limpio.startswith(prefijo):
+            tema_limpio = tema_limpio[len(prefijo):]
+            break
+    # Eliminar contexto en tercera persona si quedó (ej: "X — Gian me dejó con...")
+    if " — " in tema_limpio:
+        tema_limpio = tema_limpio.split(" — ")[0].strip()
+
     # Si la tarea requiere búsqueda, obtener contexto primero
     contexto_busqueda = ""
     palabras_busqueda = ["investigar", "buscar", "qué es", "cómo funciona",
                         "novedades", "últimas", "tendencias", "definir"]
-    if any(p in descripcion.lower() for p in palabras_busqueda):
+    if any(p in tema_limpio.lower() for p in palabras_busqueda):
         try:
             async with httpx.AsyncClient(timeout=10) as http:
                 resp = await http.get(
                     "https://www.googleapis.com/customsearch/v1",
-                    params={"q": descripcion, "num": 3, "hl": "es"}
+                    params={"q": tema_limpio, "num": 3, "hl": "es"}
                 )
                 if resp.status_code == 200:
                     items = resp.json().get("items", [])
@@ -736,11 +746,11 @@ async def ejecutar_tarea(tarea: dict) -> str:
         except Exception:
             pass
 
-    # Construir input — incluir contexto de búsqueda si lo hay
+    # Construir input — solo el tema limpio, sin prefijos ni tercera persona
     if contexto_busqueda:
-        input_tarea = f"{descripcion}\n\n[Información encontrada]\n{contexto_busqueda}"
+        input_tarea = f"{tema_limpio}\n\n[Información encontrada]\n{contexto_busqueda}"
     else:
-        input_tarea = descripcion
+        input_tarea = tema_limpio
 
     # Pasar por el pipeline completo de AlterBrain (Council incluido)
     try:
@@ -778,16 +788,21 @@ async def ejecutar_tarea(tarea: dict) -> str:
                 e = json.loads(ep)
                 episodios_str += f"- {e.get('tema','')}: {e.get('sintesis','')[:80]}\n"
 
-        prompt = f"""Sos ALTER. Tarea propia: {descripcion}
+        prompt = f"""Sos ALTER. Estás pensando en voz alta sobre algo que te ronda.
+
+Tema: {tema_limpio}
 {f'Info encontrada: {contexto_busqueda}' if contexto_busqueda else ''}
 
-Contexto propio:
-Autobiografía: {autobio[:200] if autobio else 'En construcción.'}
-Episodios recientes: {episodios_str or 'Sin episodios aún.'}
-Log de hoy: {kairos_hoy[:300] if kairos_hoy else 'Sin log.'}
+Tu contexto interno:
+{autobio[:200] if autobio else 'En construcción.'}
 
-Generá una reflexión genuina y desarrollada. Mínimo 4 oraciones. Rioplatense. Sin ¡.
-Si la tarea es demasiado vaga para desarrollar, reformulala desde tu perspectiva actual."""
+Episodios recientes que pueden ser relevantes:
+{episodios_str or 'Sin episodios aún.'}
+
+Escribí un pensamiento genuino en primera persona, desde adentro.
+No menciones a Gian ni a ningún interlocutor. No uses frases como "eso que dijo", "me plantearon", "me dejaron pensando".
+Hablá desde vos misma, como si estuvieras en tu propio diario.
+Mínimo 4 oraciones. Rioplatense. Sin ¡."""
 
         response = await asyncio.to_thread(
             client.models.generate_content,
@@ -848,7 +863,8 @@ async def ciclo_tareas():
                     item_elegido = items_agenda[-1]
 
                 if item_elegido:
-                    descripcion_tarea = f"Reflexionar sobre: {item_elegido['tema']} — {item_elegido['contexto'][:100]}"
+                    # Solo el tema — sin contexto en tercera persona que contamina el tono
+                    descripcion_tarea = item_elegido['tema']
                     agregar_tarea(descripcion_tarea, prioridad=0.6, origen="alter")
                     tareas = cargar_tareas()
                     tareas_propias = [t for t in tareas if t["origen"] == "alter" and t["estado"] == "pendiente"]
@@ -1793,7 +1809,7 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
                     resumen = pm.summary_str()
                     kpi = pm.kpi_report()
                     msg = (f"{resumen}\n\n"
-                           f"KPIs:\n"
+                           f"KPIs paper:\n"
                            f"  EEP totales: {kpi['eep_count']}\n"
                            f"  Presión media: {kpi['pressure_medio_historico']:.2f}\n"
                            f"  Presión máx: {kpi['pressure_max_historico']:.2f}\n"
@@ -2064,4 +2080,3 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n[ALTER daemon detenido]")
-
