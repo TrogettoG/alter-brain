@@ -1777,8 +1777,9 @@ Solo el texto, sin JSON ni prefijos.
         if len(self.motivos_recientes) < 3:
             return None
 
-        # Verificar bloqueo de parámetros recientes (6 horas)
+        # Verificar bloqueo de parámetros recientes (24 horas — evita oscilaciones)
         params_bloqueados = set()
+        ultimo_valor = {}  # último valor aplicado por parámetro
         if self.redis:
             try:
                 raw = self.redis.lrange(REDIS_KEY_SELF_MODS, 0, 19)
@@ -1786,8 +1787,12 @@ Solo el texto, sin JSON ni prefijos.
                 for entry in raw:
                     m = json.loads(entry)
                     t_mod = datetime.fromisoformat(m.get("t", "")).timestamp()
-                    if ahora - t_mod < 6 * 3600:  # 6 horas
-                        params_bloqueados.add(m.get("parametro", ""))
+                    param = m.get("parametro", "")
+                    if ahora - t_mod < 24 * 3600:  # 24 horas
+                        params_bloqueados.add(param)
+                    # Guardar el último valor aplicado (el más reciente en el historial)
+                    if param not in ultimo_valor:
+                        ultimo_valor[param] = m.get("nuevo")
             except Exception:
                 pass
 
@@ -1848,10 +1853,16 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
             # Umbral subido a 0.75 — evita propuestas débiles
             if propuesta.get("confianza", 0) < 0.75:
                 return None
-            # Bloquear si el parámetro ya se modificó en las últimas 6 horas
+            # Bloquear si el parámetro ya se modificó en las últimas 24 horas
             param = propuesta.get("parametro", "")
             if param in params_bloqueados:
-                print(f"[RUMIA] {param} bloqueado — modificado hace menos de 6h")
+                print(f"[RUMIA] {param} bloqueado — modificado hace menos de 24h")
+                return None
+            # Delta mínimo — evitar oscilaciones de 0.1 en 0.1
+            valor_nuevo = propuesta.get("valor_nuevo", 0)
+            valor_prev = ultimo_valor.get(param)
+            if valor_prev is not None and abs(valor_nuevo - valor_prev) < 0.15:
+                print(f"[RUMIA] {param} delta demasiado pequeño ({abs(valor_nuevo - valor_prev):.2f}) — ignorado")
                 return None
             return propuesta
         except Exception:

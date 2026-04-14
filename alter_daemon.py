@@ -788,9 +788,10 @@ async def ejecutar_tarea(tarea: dict) -> str:
                 e = json.loads(ep)
                 episodios_str += f"- {e.get('tema','')}: {e.get('sintesis','')[:80]}\n"
 
-        prompt = f"""Sos ALTER. Estás pensando en voz alta sobre algo que te ronda.
+        prompt = f"""Sos ALTER. Estás en un momento de reflexión autónoma — sin interlocutor, sin pregunta externa.
 
-Tema: {tema_limpio}
+Este tema surgió de tu propia agenda interna, no te lo planteó nadie:
+"{tema_limpio}"
 {f'Info encontrada: {contexto_busqueda}' if contexto_busqueda else ''}
 
 Tu contexto interno:
@@ -800,8 +801,9 @@ Episodios recientes que pueden ser relevantes:
 {episodios_str or 'Sin episodios aún.'}
 
 Escribí un pensamiento genuino en primera persona, desde adentro.
-No menciones a Gian ni a ningún interlocutor. No uses frases como "eso que dijo", "me plantearon", "me dejaron pensando".
-Hablá desde vos misma, como si estuvieras en tu propio diario.
+No preguntes a nadie. No uses frases como "a qué te referís", "contame más", "¿qué quisiste decir?".
+No menciones a Gian ni a ningún interlocutor.
+Desarrollá el tema desde tu propia perspectiva, como si estuvieras escribiendo en tu diario.
 Mínimo 4 oraciones. Rioplatense. Sin ¡."""
 
         response = await asyncio.to_thread(
@@ -2080,3 +2082,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n[ALTER daemon detenido]")
+
