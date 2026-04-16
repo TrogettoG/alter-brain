@@ -2167,6 +2167,17 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
                 f'{seccion}\n{interlocutor} dijo: "{texto_input}"'
             )
 
+        # Si es tarea autónoma, reemplazar "tarea_autonoma dijo: X" por instrucción de reflexión propia
+        if interlocutor == "tarea_autonoma":
+            prompt = prompt.replace(
+                f'tarea_autonoma dijo: "{texto_input}"',
+                f'REFLEXIÓN AUTÓNOMA — este tema surgió de tu propia agenda interna, no de ningún interlocutor:\n'
+                f'"{texto_input}"\n\n'
+                f'Desarrollá este tema desde adentro. No preguntes a nadie. '
+                f'No uses frases como "a qué te referís", "contame más", "¿qué quisiste decir?". '
+                f'Hablá en primera persona como si escribieras en tu diario.'
+            )
+
         print(f"\n[INPUT] '{texto_input}'")
         print(f"[E]    V:{self.v:.2f}  A:{self.a:.2f}  P:{self.p:.2f}  C:{self.nivel_cansancio:.2f}")
         print(f"[C]    {self.campo_str()}")
