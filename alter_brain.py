@@ -344,6 +344,14 @@ class AlterBrain:
             self.pressure = None
             print(f"[PRESSURE] No disponible: {e}")
 
+        # B6 — Constitución Evolutiva
+        try:
+            from alter_constitution import init_constitution
+            self.constitution = init_constitution(redis_client=self.redis)
+        except Exception as e:
+            self.constitution = None
+            print(f"[CONSTITUTION] No disponible: {e}")
+
         print(f"[B4] MetricsCollector + Simulator + SelfModel + MetaLearning + Auditor OK")
 
     def _sync_alterb3_from_vector(self):
@@ -1864,6 +1872,25 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
             if valor_prev is not None and abs(valor_nuevo - valor_prev) < 0.15:
                 print(f"[RUMIA] {param} delta demasiado pequeño ({abs(valor_nuevo - valor_prev):.2f}) — ignorado")
                 return None
+            # Evaluar contra la constitución evolutiva
+            if hasattr(self, "constitution") and self.constitution:
+                try:
+                    # Estimar semanas de evidencia desde el historial de trazas
+                    semanas = max(1, self.recuperar_trazas(1) and 2 or 0)
+                    resultado = self.constitution.evaluar_auto_mod(
+                        parametro        = param,
+                        valor_anterior   = propuesta.get("valor_anterior", 0),
+                        valor_nuevo      = valor_nuevo,
+                        semanas_evidencia= semanas,
+                    )
+                    if resultado == "rechazado":
+                        print(f"[CONSTITUTION] Auto-mod {param} rechazada por constitución")
+                        return None
+                    elif resultado == "requiere_consejo":
+                        print(f"[CONSTITUTION] Auto-mod {param} requiere consejo — diferida")
+                        return None
+                except Exception as e:
+                    print(f"[CONSTITUTION] Error evaluando: {e}")
             return propuesta
         except Exception:
             return None
@@ -2029,6 +2056,13 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO o la palabra null.
 
         if audit_info:
             snapshot += "\n\n" + "\n".join(audit_info)
+
+        # Constitución evolutiva — rasgos a preservar y líneas que no se cruzan
+        if hasattr(self, "constitution") and self.constitution:
+            try:
+                snapshot += "\n\n" + self.constitution.summary_str()
+            except Exception:
+                pass
 
         return snapshot
 
