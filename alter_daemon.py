@@ -572,6 +572,23 @@ RESPONDÉ ÚNICAMENTE EN JSON VÁLIDO. Sin texto antes ni después.
         except Exception as e:
             log(f"[B4-AUDITOR] Error: {e}")
 
+        # B6 — Identity Drift semanal
+        try:
+            from alter_identity_drift import IdentityDriftMonitor
+            dm = IdentityDriftMonitor(redis_client=redis)
+            reporte_drift = dm.calcular_drift()
+            if reporte_drift:
+                log(f"[B6-DRIFT] {reporte_drift.nivel} (score:{reporte_drift.score_total:.2f})")
+                kairos_append("DRIFT-SEMANAL", reporte_drift.resumen_str())
+                if reporte_drift.alerta:
+                    await send_telegram(
+                        f"⚠️ Drift de identidad alto:\n{reporte_drift.resumen_str()}"
+                    )
+            else:
+                log("[B6-DRIFT] Sin entradas suficientes aún")
+        except Exception as e:
+            log(f"[B6-DRIFT] Error en DREAM: {e}")
+
     except Exception as e:
         log(f"DREAM error en consolidación: {e}")
 
@@ -1599,7 +1616,7 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
                               "/agenda", "/autobiografia", "/economia",
                               "/mundo", "/aprobar", "/rechazar", "/trazas",
                               "/dream", "/tareas", "/auditar", "/codigoaudit",
-                              "/burst", "/presion") or texto.lower().startswith("/tarea "):
+                              "/burst", "/presion", "/drift") or texto.lower().startswith("/tarea "):
 
             if texto.lower() == "/drives":
                 drives = cargar_drives()
@@ -1819,6 +1836,30 @@ async def ciclo_telegram(ultimo_offset: int) -> int:
                     await send_telegram(msg)
                 except Exception as e:
                     await send_telegram(f"Error: {e}")
+
+            elif texto.lower() == "/drift":
+                try:
+                    from alter_identity_drift import IdentityDriftMonitor
+                    dm = IdentityDriftMonitor(redis_client=redis)
+                    reporte = dm.calcular_drift()
+                    if reporte:
+                        kpi = dm.kpi_report()
+                        msg = (
+                            f"{reporte.resumen_str()}\n\n"
+                            f"KPIs paper:\n"
+                            f"  Semanas medidas: {kpi['semanas_medidas']}\n"
+                            f"  Drift medio: {kpi['drift_medio']:.2f}\n"
+                            f"  Drift máx: {kpi['drift_max']:.2f}\n"
+                            f"  Tendencia: {kpi['drift_tendencia']}\n"
+                            f"  Plasticidad media: {kpi['plasticidad_media']:.2f}\n"
+                            f"  Narrativa evolucionando: {kpi['narrativa_evolucionando']}\n"
+                            f"  Familias actuales: {kpi['familias_narrativas_actuales']}"
+                        )
+                    else:
+                        msg = "Drift: faltan entradas del test de viernes (mínimo 2)."
+                    await send_telegram(msg)
+                except Exception as e:
+                    await send_telegram(f"Error drift: {e}")
 
             elif texto.lower().startswith("/tarea "):
                 descripcion = texto[7:].strip()

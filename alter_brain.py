@@ -352,6 +352,14 @@ class AlterBrain:
             self.constitution = None
             print(f"[CONSTITUTION] No disponible: {e}")
 
+        # B6 — Identity Drift Monitor
+        try:
+            from alter_identity_drift import init_with_baseline
+            self.drift_monitor = init_with_baseline(redis_client=self.redis)
+        except Exception as e:
+            self.drift_monitor = None
+            print(f"[DRIFT] No disponible: {e}")
+
         print(f"[B4] MetricsCollector + Simulator + SelfModel + MetaLearning + Auditor OK")
 
     def _sync_alterb3_from_vector(self):
